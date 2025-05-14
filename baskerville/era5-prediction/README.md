@@ -26,7 +26,7 @@ sbatch batch-download.sh
 ## Perform the prediction
 
 ```
-sbatch batch-runmodel.py
+sbatch batch-runmodel.sh
 ```
 
 ## Display the resulting image

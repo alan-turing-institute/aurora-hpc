@@ -17,10 +17,8 @@ echo "## Aurora runmodel script starting"
 # Quit on error
 set -e
 
-export CDSAPI_RC=$PWD/cdsapi.config
-
-if [ ! -d venv ] || [ ! -d downloads ]; then
-  echo "Please run the batch-download.sh script to set up the virtual environment and download the data."
+if [ ! -d downloads ]; then
+  echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
 
@@ -30,7 +28,6 @@ echo "## Loading modules"
 module -q purge
 module -q load baskerville
 module -q load bask-apps/live
-
 module -q load matplotlib/3.7.2-gfbf-2023a
 module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
 
@@ -41,13 +38,17 @@ python -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-
 pip install --quiet cdsapi
-pip install -e ../../aurora
+pip install --quiet -e ../../aurora
 
 echo
 echo "## Running model"
 
+# Track GPU and CPU metrics
+nvidia-smi dmon -o TD -s puct -d 1 > log-runmodel-gpu.txt &
+vmstat -t 1 -y > log-runmodel-cpu.txt &
+
+# Perform the prediction
 python runmodel.py
 
 echo
