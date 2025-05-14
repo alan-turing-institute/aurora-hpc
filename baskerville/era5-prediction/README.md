@@ -7,6 +7,7 @@ https://microsoft.github.io/aurora/example_era5.html
 Clone the repository:
 ```
 git clone --recursive https://github.com/alan-turing-institute/aurora-hpc.git
+cd aurora-hpc/baskerville/era5-prediction
 ```
 
 Get your API key from the Climate Data Store (see the page linked above).
