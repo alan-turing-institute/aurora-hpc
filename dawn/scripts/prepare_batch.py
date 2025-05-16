@@ -1,3 +1,5 @@
+print("Importing ipex")
+import intel_extension_for_pytorch as ipex
 import torch
 import xarray as xr
 from pathlib import Path
@@ -13,6 +15,7 @@ atmos_vars_ds = xr.open_dataset(download_path / "2023-01-01-atmospheric.nc", eng
 
 i = 1  # Select this time index in the downloaded data.
 
+print("batching...")
 batch = Batch(
     surf_vars={
         # First select time points `i` and `i - 1`. Afterwards, `[None]` inserts a
@@ -48,17 +51,18 @@ batch = Batch(
 
 from aurora import Aurora, rollout
 
+print("loading model")
 model = Aurora(use_lora=False)  # The pretrained version does not use LoRA.
 model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 
 model.eval()
-model = model.to("cuda")
+model = model.to("xpu")
 
 with torch.inference_mode():
     preds = [pred.to("cpu") for pred in rollout(model, batch, steps=2)]
 
 import pickle
 
-with open("preds.pkl", "w") as f:
+with open("preds.pkl", "wb") as f:
     pickle.dump(preds, f)
 
