@@ -1,3 +1,5 @@
+"""Fine tune Aurora weather model."""
+print("importing...")
 from pathlib import Path
 import intel_extension_for_pytorch as ipex
 import torch
@@ -56,13 +58,33 @@ batch = Batch(
     ),
 )
 
-
+print("preparing model...")
 model = model.to("xpu")
 model.train()
 model.configure_activation_checkpointing()
 
+# AdamW, as used in the paper.
+optimizer = torch.optim.AdamW(model.parameters())
+
+# Not really necessary, for one forward pass.
+optimizer.zero_grad()
+
+print("performing forward pass...")
 pred = model.forward(batch)
-loss = nn.CrossEntropyLoss()
+#loss_fn = nn.CrossEntropyLoss()
+
+# space constraints
+pred = pred.to("cpu")
+
+# mean absolute error of one variable
+print("calculating loss...")
+loss = torch.mean(torch.abs(pred.surf_vars["2t"] - batch.surf_vars["2t"][:,:,:720,:]))
+
+print("performing backward pass...")
 loss.backward()
 
+print("optimizing...")
+optimizer.step()
+
+print("done")
 
