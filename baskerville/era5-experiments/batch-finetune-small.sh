@@ -1,4 +1,5 @@
 #!/bin/bash
+# vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
 #SBATCH --time 0:10:0
