@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# vim: et:ts=4:sts=4:sw=4
+
+# SPDX-License-Identifier: MIT
+# Copyright 2025 The Alan Turing Institute
+
 from pathlib import Path
 
 import cdsapi

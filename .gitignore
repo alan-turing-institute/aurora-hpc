@@ -175,3 +175,6 @@ cython_debug/
 
 # Aurora speciic things
 cdsapi.config
+log-*.txt
+log-*.txt.stats
+.*.swp
