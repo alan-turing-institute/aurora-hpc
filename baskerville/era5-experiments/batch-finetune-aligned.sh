@@ -51,7 +51,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-finetune-gpu.txt &
 vmstat -t 1 -y > log-finetune-cpu.txt &
 
 # Perform the prediction
-python finetune-dawn.py
+python finetune-aligned.py
 
 echo
 echo "## Tidying up"
