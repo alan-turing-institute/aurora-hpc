@@ -59,7 +59,7 @@ sbatch batch-finetune.sh
 Alternatively to run the same fine-tuning code that works on DAWN, run the following:
 
 ```
-sbatch batch-finetune-dawn.sh
+sbatch batch-finetune-aligned.sh
 ```
 
 The resulting errors looks like this:
