@@ -6,7 +6,7 @@ import torch
 import xarray as xr
 from aurora import Aurora, Batch, Metadata
 import torch.nn as nn
-
+from aurora_loss import mae
 
 print("loading model...")
 model = Aurora(
@@ -71,14 +71,14 @@ optimizer.zero_grad()
 
 print("performing forward pass...")
 pred = model.forward(batch)
-#loss_fn = nn.CrossEntropyLoss()
 
 # space constraints
 pred = pred.to("cpu")
 
 # mean absolute error of one variable
 print("calculating loss...")
-loss = torch.mean(torch.abs(pred.surf_vars["2t"] - batch.surf_vars["2t"][:,:,:720,:]))
+# loss = torch.mean(torch.abs(pred.surf_vars["2t"] - batch.surf_vars["2t"][:,:,:720,:]))
+loss = mae(pred, batch)
 
 print("performing backward pass...")
 loss.backward()

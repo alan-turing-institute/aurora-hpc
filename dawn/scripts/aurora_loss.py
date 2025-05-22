@@ -19,14 +19,14 @@ def mae(x_hat_t, x_t):
     }
     foo = sum(
         [
-            (v / (720 * 1440)) * torch.sum(torch.abs(x_hat_t.surf_vars[k] - x_t.surf_vars[k]))
+            (v / (720 * 1440)) * torch.sum(torch.abs(x_hat_t.surf_vars[k] - x_t.surf_vars[k][:,:,:720,:]))
             for k, v in surface.items()
         ]
     )
     bar = sum(
         [
             (v / (720 * 1440 * 13))
-            * torch.sum(torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k]))
+            * torch.sum(torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:,:,:,:720,:]))
             for k, v in atmos.items()
         ]
     )
