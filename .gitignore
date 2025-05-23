@@ -177,3 +177,6 @@ cython_debug/
 # Aurora speciic things
 cdsapi.config
 era5
+
+# slurm outputs
+slurm-*.out
