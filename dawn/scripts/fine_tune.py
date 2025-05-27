@@ -2,12 +2,14 @@
 
 print("importing...")
 from pathlib import Path
+
 import intel_extension_for_pytorch as ipex
 import torch
-import xarray as xr
-from aurora import Aurora, Batch, Metadata
 import torch.nn as nn
+import xarray as xr
 from aurora_loss import mae
+
+from aurora import Aurora, Batch, Metadata
 
 print("loading model...")
 model = Aurora(

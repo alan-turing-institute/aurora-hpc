@@ -1,6 +1,7 @@
 import unittest
-import torch
+
 import aurora_loss
+import torch
 
 
 class myclass:

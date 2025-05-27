@@ -4,11 +4,9 @@ https://microsoft.github.io/aurora/example_era5.html
 """
 
 import os
-
-import cdsapi
-
 from pathlib import Path
 
+import cdsapi
 
 # Data will be downloaded here.
 download_path = Path("../era5/era_v_inf")

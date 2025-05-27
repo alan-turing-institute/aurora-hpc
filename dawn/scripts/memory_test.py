@@ -1,6 +1,6 @@
 print("Importing")
-import torch
 import intel_extension_for_pytorch as ipex
+import torch
 
 print("Imports done")
 
