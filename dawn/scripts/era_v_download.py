@@ -2,6 +2,7 @@
 
 https://microsoft.github.io/aurora/example_era5.html
 """
+
 import os
 
 import cdsapi
@@ -15,7 +16,7 @@ download_path = Path("../era5/era_v_inf")
 c = cdsapi.Client(
     url="https://cds.climate.copernicus.eu/api",
     key=os.environ["CDSAPI_KEY"],
-    debug=True
+    debug=True,
 )
 
 download_path = download_path.expanduser()

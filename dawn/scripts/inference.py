@@ -1,4 +1,5 @@
 """Do a rollout with Aurora to predict the weather."""
+
 print("Importing ipex")
 import intel_extension_for_pytorch as ipex
 import torch
@@ -11,8 +12,13 @@ from aurora import Batch, Metadata
 download_path = Path("../era5/era_v_inf")
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
-surf_vars_ds = xr.open_dataset(download_path / "2023-01-01-surface-level.nc", engine="netcdf4")
-atmos_vars_ds = xr.open_dataset(download_path / "2023-01-01-atmospheric.nc", engine="netcdf4")
+surf_vars_ds = xr.open_dataset(
+    download_path / "2023-01-01-surface-level.nc", engine="netcdf4"
+)
+atmos_vars_ds = xr.open_dataset(
+    download_path / "2023-01-01-atmospheric.nc", engine="netcdf4"
+)
+
 
 def main(steps):
     i = 1  # Select this time index in the downloaded data.
@@ -47,7 +53,9 @@ def main(steps):
             # `datetime.datetime`s. Note that this needs to be a tuple of length one:
             # one value for every batch element.
             time=(surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[i],),
-            atmos_levels=tuple(int(level) for level in atmos_vars_ds.pressure_level.values),
+            atmos_levels=tuple(
+                int(level) for level in atmos_vars_ds.pressure_level.values
+            ),
         ),
     )
 
@@ -68,10 +76,10 @@ def main(steps):
     with open("preds.pkl", "wb") as f:
         pickle.dump(preds, f)
 
+
 if __name__ == "__main__":
     steps = 2
     if len(sys.argv) > 1:
-        steps = int(sys.argv[1]):
-        
-    main(steps)
+        steps = int(sys.argv[1])
 
+    main(steps)

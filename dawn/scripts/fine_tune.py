@@ -1,4 +1,5 @@
 """Fine tune Aurora weather model."""
+
 print("importing...")
 from pathlib import Path
 import intel_extension_for_pytorch as ipex
@@ -19,8 +20,12 @@ download_path = Path("../era5/era_v_inf")
 
 print("loading data...")
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
-surf_vars_ds = xr.open_dataset(download_path / "2023-01-01-surface-level.nc", engine="netcdf4")
-atmos_vars_ds = xr.open_dataset(download_path / "2023-01-01-atmospheric.nc", engine="netcdf4")
+surf_vars_ds = xr.open_dataset(
+    download_path / "2023-01-01-surface-level.nc", engine="netcdf4"
+)
+atmos_vars_ds = xr.open_dataset(
+    download_path / "2023-01-01-atmospheric.nc", engine="netcdf4"
+)
 
 i = 1  # Select this time index in the downloaded data.
 
@@ -87,4 +92,3 @@ print("optimizing...")
 optimizer.step()
 
 print("done")
-

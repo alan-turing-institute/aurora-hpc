@@ -106,5 +106,6 @@ class LossTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             aurora_loss.mae(ground_truth, predictions)
 
+
 if __name__ == "__main__":
     unittest.main()

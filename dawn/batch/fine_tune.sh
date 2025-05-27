@@ -19,4 +19,3 @@ export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
 cd ../scripts/
 
 ipython fine_tune.py
-
