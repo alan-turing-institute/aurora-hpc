@@ -1,10 +1,13 @@
 """Do a rollout with Aurora to predict the weather."""
 
+import sys
+
 print("Importing ipex")
+from pathlib import Path
+
 import intel_extension_for_pytorch as ipex
 import torch
 import xarray as xr
-from pathlib import Path
 
 from aurora import Batch, Metadata
 
@@ -68,6 +71,7 @@ def main(steps):
     model.eval()
     model = model.to("xpu")
 
+    print("doing rollout")
     with torch.inference_mode():
         preds = [pred.to("cpu") for pred in rollout(model, batch, steps=steps)]
 
