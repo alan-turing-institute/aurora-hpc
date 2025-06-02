@@ -27,6 +27,40 @@ rank = int(os.environ["RANK"])
 local_rank = int(os.environ["LOCAL_RANK"])
 dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+def mae(x_hat_t, x_t):
+    lamb = 2
+    vs_va = 9
+    surface = {
+        "2t": 3.0,
+        "msl": 1.5,
+        "10u": 0.77,
+        "10v": 0.66,
+    }
+    atmos = {
+        "z": 2.8,
+        "q": 0.78,
+        "t": 1.7,
+        "u": 0.87,
+        "v": 0.6,
+    }
+    foo = sum(
+        [
+            (v / (720 * 1440)) * torch.sum(torch.abs(x_hat_t.surf_vars[k] - x_t.surf_vars[k][:,:,:720,:]))
+            for k, v in surface.items()
+        ]
+    )
+    bar = sum(
+        [
+            (v / (720 * 1440 * 13))
+            * torch.sum(torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:,:,:,:720,:]))
+            for k, v in atmos.items()
+        ]
+    )
+
+    alpha = 0.25
+
+    return (lamb / vs_va) * ((alpha * foo) + bar)
+
 # Fine-Tuning
 # See https://microsoft.github.io/aurora/finetuning.html
 
@@ -38,7 +72,10 @@ model = Aurora(
 model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 torch.cuda.set_device(local_rank)
 model = model.to(local_rank)
-model = FSDP(model)
+model = FSDP(
+    model,
+    device_id=torch.cuda.current_device(),
+)
 
 # Data will be downloaded here.
 download_path = Path("./downloads")
@@ -101,17 +138,19 @@ print_memory_usage()
 
 with torch.autocast(device_type="cuda"):
     pred = model.forward(batch)
-    #loss_fn = nn.CrossEntropyLoss()
 
     # space constraints
     batch = batch.to(local_rank)
 
     # mean absolute error of one variable
     print("calculating loss...")
-    loss = torch.mean(torch.abs(pred.surf_vars["2t"] - batch.surf_vars["2t"][:,:,:720,:]))
+    loss = mae(pred, batch)
 
-    pred = pred.to("cpu")
-    del batch
+    loss = loss.to(local_rank)
+    pred = pred.to(local_rank)
+    batch = batch.to(local_rank)
+    #pred = pred.to("cpu")
+    #batch = batch.to("cpu")
 
 print("emptying cache...")
 print_memory_usage()

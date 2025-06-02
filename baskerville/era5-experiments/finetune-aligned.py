@@ -40,7 +40,7 @@ def mae(x_hat_t, x_t):
     bar = sum(
         [
             (v / (720 * 1440 * 13))
-            * torch.sum(torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:,:,:720,:]))
+            * torch.sum(torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:,:,:,:720,:]))
             for k, v in atmos.items()
         ]
     )
