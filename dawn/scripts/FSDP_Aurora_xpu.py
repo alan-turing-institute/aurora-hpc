@@ -167,7 +167,11 @@ def train(args, model, rank, world_size, inp, gt, optimizer, epoch, sampler=None
     loss.backward()
     optimizer.step()
     ddp_loss[0] += loss.item()
+<<<<<<< Updated upstream
     ddp_loss[1] += len(inp)
+=======
+    # ddp_loss[1] += len(inp)
+>>>>>>> Stashed changes
 
     print("Running all_reduce")
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
@@ -179,22 +183,31 @@ def test(model, rank, world_size, inp, gt):
     model.eval()
     device = torch.device(f"xpu:{rank}")
     correct = 0
+<<<<<<< Updated upstream
     ddp_loss = torch.zeros(3).to(device)
+=======
+    ddp_loss = torch.zeros(2).to(device)
+>>>>>>> Stashed changes
     with torch.no_grad():
         inp = inp.to(device)
         gt = gt.to(device)
         output = model(inp)
         loss = mae(output, gt)
         ddp_loss[0] += loss.item()  # sum up batch loss
+<<<<<<< Updated upstream
         pred = output.argmax(
             dim=1, keepdim=True
         )  # get the index of the max log-probability
         ddp_loss[1] += pred.eq(target.view_as(pred)).sum().item()
         ddp_loss[2] += len(inp)
+=======
+        # ddp_loss[1] += len(inp)
+>>>>>>> Stashed changes
 
     dist.all_reduce(ddp_loss, op=dist.ReduceOp.SUM)
 
     if rank == 0:
+<<<<<<< Updated upstream
         test_loss = ddp_loss[0] / ddp_loss[2]
         print(
             "Test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)\n".format(
@@ -202,6 +215,11 @@ def test(model, rank, world_size, inp, gt):
                 int(ddp_loss[1]),
                 int(ddp_loss[2]),
                 100.0 * ddp_loss[1] / ddp_loss[2],
+=======
+        print(
+            "Test set loss: {:.4f}".format(
+                ddp_loss[0],
+>>>>>>> Stashed changes
             )
         )
 
@@ -220,11 +238,19 @@ def fsdp_main(rank, world_size, args):
 
     # Get input
     train_input = get_input_batch(1, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+<<<<<<< Updated upstream
     # test_input = get_batch(i=1)
 
     # Get output
     train_gt = get_gt_batch(1, static_vars_ds, surf_vars_ds, atmos_vars_ds)
     # test_gt = get_batch(i=5)
+=======
+    #test_input = get_input_batch(1, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+
+    # Get output
+    train_gt = get_gt_batch(1, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+    #test_gt = get_gt_batch(1, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+>>>>>>> Stashed changes
 
     xpu_kwargs = {"num_workers": 2, "pin_memory": True, "shuffle": False}
 
@@ -240,11 +266,19 @@ def fsdp_main(rank, world_size, args):
     init_end_event = torch.xpu.Event(enable_timing=True)
 
     print("Setting up model")
+<<<<<<< Updated upstream
     model = Aurora(use_lora=False, autocast=False).to(
         device
     )  # , timestep=timedelta(args.timestep)).to(device)
     # Specify the argument `device_ids` as XPU device in FSDP API.
     print(f"Moving FSDP model to {device}")
+=======
+    model = Aurora(use_lora=False, autocast=True).to(
+        device
+    )  # , timestep=timedelta(args.timestep)).to(device)
+    # Specify the argument `device_ids` as XPU device in FSDP API.
+    print(f"Wrapping FSDP model")
+>>>>>>> Stashed changes
     model = FSDP(model, device_id=device)
 
     # AdamW, as used in the paper.
@@ -254,6 +288,7 @@ def fsdp_main(rank, world_size, args):
     init_start_event.record()
     for epoch in range(1, args.epochs + 1):
         train(
+<<<<<<< Updated upstream
             args,
             model=model,
             rank=rank,
@@ -264,6 +299,18 @@ def fsdp_main(rank, world_size, args):
             epoch=epoch,
         )
         # test(model, rank, world_size, test_batch)
+=======
+           args,
+           model=model,
+           rank=rank,
+           world_size=world_size,
+           inp=train_input,
+           gt=train_gt,
+           optimizer=optimizer,
+           epoch=epoch,
+        )
+        #test(model, rank, world_size, test_input, test_gt)
+>>>>>>> Stashed changes
         scheduler.step()
 
     init_end_event.record()
