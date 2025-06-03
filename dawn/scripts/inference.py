@@ -79,12 +79,13 @@ def main(steps):
     times = []
 
     with torch.inference_mode():
+        time_start = time.time()
         for pred in rollout(model, batch, steps=steps):
-            time_start = time.time()
             preds.append(pred.to("cpu"))
             time_end = time.time()
             print(f"Time for one step: {time_end - time_start}")
             times.append(time_start - time_end)
+            time_start = time.time()
 
     avg_time = sum(times) / len(times)
     print(f"Average time for {steps} steps: {avg_time}")
