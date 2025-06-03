@@ -184,3 +184,6 @@ era5
 
 # slurm outputs
 slurm-*.out
+log-*.txt
+log-*.txt.stats
+.*.swp

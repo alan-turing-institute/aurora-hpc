@@ -1,9 +1,15 @@
+#!/usr/bin/env python
+# vim: et:ts=4:sts=4:sw=4
+
+# SPDX-License-Identifier: MIT
+# Copyright 2025 The Alan Turing Institute
+
 from pathlib import Path
 
 import cdsapi
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../era5-experiments/downloads")
 
 c = cdsapi.Client()
 
@@ -32,7 +38,7 @@ if not (download_path / "static.nc").exists():
 print("Static variables downloaded!")
 
 # Download the surface-level variables.
-if not (download_path / "2023-01-01-surface-level.nc").exists():
+if not (download_path / "2023-01-01-08-surface-level.nc").exists():
     c.retrieve(
         "reanalysis-era5-single-levels",
         {
@@ -45,16 +51,16 @@ if not (download_path / "2023-01-01-surface-level.nc").exists():
             ],
             "year": "2023",
             "month": "01",
-            "day": "01",
+            "day": ["01", "02", "03", "04", "05", "06", "07", "08"],
             "time": ["00:00", "06:00", "12:00", "18:00"],
             "format": "netcdf",
         },
-        str(download_path / "2023-01-01-surface-level.nc"),
+        str(download_path / "2023-01-01-08-surface-level.nc"),
     )
 print("Surface-level variables downloaded!")
 
 # Download the atmospheric variables.
-if not (download_path / "2023-01-01-atmospheric.nc").exists():
+if not (download_path / "2023-01-01-08-atmospheric.nc").exists():
     c.retrieve(
         "reanalysis-era5-pressure-levels",
         {
@@ -83,10 +89,10 @@ if not (download_path / "2023-01-01-atmospheric.nc").exists():
             ],
             "year": "2023",
             "month": "01",
-            "day": "01",
+            "day": ["01", "02", "03", "04", "05", "06", "07", "08"],
             "time": ["00:00", "06:00", "12:00", "18:00"],
             "format": "netcdf",
         },
-        str(download_path / "2023-01-01-atmospheric.nc"),
+        str(download_path / "2023-01-01-08-atmospheric.nc"),
     )
 print("Atmospheric variables downloaded!")
