@@ -1,6 +1,8 @@
 """Do a rollout with Aurora to predict the weather."""
 
+import logging
 import sys
+import time
 
 print("Importing ipex")
 from pathlib import Path
@@ -24,6 +26,7 @@ atmos_vars_ds = xr.open_dataset(
 
 
 def main(steps):
+    start_time_total = time.time()
     i = 1  # Select this time index in the downloaded data.
 
     print("batching...")
@@ -72,13 +75,28 @@ def main(steps):
     model = model.to("xpu")
 
     print("doing rollout")
+    preds = []
+    times = []
+
     with torch.inference_mode():
-        preds = [pred.to("cpu") for pred in rollout(model, batch, steps=steps)]
+        for pred in rollout(model, batch, steps=steps):
+            time_start = time.time()
+            preds.append(pred.to("cpu"))
+            time_end = time.time()
+            print(f"Time for one step: {time_end - time_start}")
+            times.append(time_start - time_end)
+
+    avg_time = sum(times) / len(times)
+    print(f"Average time for {steps} steps: {avg_time}")
 
     import pickle
 
-    with open("preds.pkl", "wb") as f:
-        pickle.dump(preds, f)
+    end_time_total = time.time()
+    print(f"Total time: {end_time_total - start_time_total}")
+
+
+#    with open("preds.pkl", "wb") as f:
+#        pickle.dump(preds, f)
 
 
 if __name__ == "__main__":
