@@ -8,10 +8,10 @@ import intel_extension_for_pytorch as ipex
 import oneccl_bindings_for_pytorch  # has side-effects
 import torch
 import torch.nn as nn
-from torch.nn.parallel import DistributedDataParallel as DDP
 import xarray as xr
 from aurora_loss import mae
 from torch.distributed import init_process_group
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 from aurora import Aurora, Batch, Metadata
 
@@ -25,7 +25,8 @@ os.environ["WORLD_SIZE"] = WORLD_SIZE
 
 os.environ["MASTER_ADDR"] = "0.0.0.0"
 os.environ["MASTER_PORT"] = "29876"
-USE_SUBDEVICES=os.environ.get("USE_SUBDEVICES", False) 
+USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
+
 
 def main():
     print("Initialising process group with backend", "ccl", flush=True)
@@ -51,12 +52,12 @@ def main():
         download_path / "2023-01-01-atmospheric.nc", engine="netcdf4"
     )
 
-    #i = 1  # Select this time index in the downloaded data.
+    # i = 1  # Select this time index in the downloaded data.
 
     # 1 for RANK 0 and 3 for RANK 1.
-    i = (RANK * 2) + 1
+    i = (int(RANK) * 2) + 1
 
-    print("batching...")
+    print(f"batching with {i=}")
     batch = Batch(
         surf_vars={
             # First select time points `i` and `i - 1`. Afterwards, `[None]` inserts a
@@ -86,7 +87,9 @@ def main():
             # `datetime.datetime`s. Note that this needs to be a tuple of length one:
             # one value for every batch element.
             time=(surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[i],),
-            atmos_levels=tuple(int(level) for level in atmos_vars_ds.pressure_level.values),
+            atmos_levels=tuple(
+                int(level) for level in atmos_vars_ds.pressure_level.values
+            ),
         ),
     )
 
@@ -108,7 +111,7 @@ def main():
         pred = model.forward(batch)
 
         # space constraints
-        #pred = pred.to("cpu")
+        # pred = pred.to("cpu")
 
         # mean absolute error of one variable
         print("calculating loss...")
@@ -122,5 +125,6 @@ def main():
         optimizer.step()
 
     print("done")
+
 
 main()
