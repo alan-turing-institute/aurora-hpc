@@ -34,11 +34,7 @@ def get_input_batch(i: int, static_vars_ds, surf_vars_ds, atmos_vars_ds):
             # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
             # `datetime.datetime`s. Note that this needs to be a tuple of length one:
             # one value for every batch element.
-            time=(
-                surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[
-                    i - 1, i
-                ],
-            ),
+            time=(surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[i],),
             atmos_levels=tuple(
                 int(level) for level in atmos_vars_ds.pressure_level.values
             ),
