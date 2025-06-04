@@ -22,38 +22,17 @@ os.environ["RANK"] = RANK
 WORLD_SIZE = os.environ["PMI_SIZE"]
 assert WORLD_SIZE == "2"
 os.environ["WORLD_SIZE"] = WORLD_SIZE
-
-os.environ["MASTER_ADDR"] = "0.0.0.0"
-os.environ["MASTER_PORT"] = "29876"
 USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
 
-def set_modules_to_forward_prefetch(model, num_to_forward_prefetch):
-    for i, layer in enumerate(model.layers):
-        if i >= len(model.layers) - num_to_forward_prefetch:
-            break
-        layers_to_prefetch = [
-            model.layers[i + j] for j in range(1, num_to_forward_prefetch + 1)
-        ]
-        layer.set_modules_to_forward_prefetch(layers_to_prefetch)
-
-
-def set_modules_to_backward_prefetch(model, num_to_backward_prefetch):
-    for i, layer in enumerate(model.layers):
-        if i < num_to_backward_prefetch:
-            continue
-        layers_to_prefetch = [
-            model.layers[i - j] for j in range(1, num_to_backward_prefetch + 1)
-        ]
-        layer.set_modules_to_backward_prefetch(layers_to_prefetch)
-
-
-def setup(rank, world_size):
+def setup():
     os.environ["MASTER_ADDR"] = "127.0.0.1"  # your master address
     os.environ["MASTER_PORT"] = "29500"  # your master port
 
     # initialize the process group by Intel® oneCCL Bindings for Pytorch\*
-    init_process_group("ccl", rank=rank, world_size=world_size)
+    init_process_group(
+        backend="ccl",
+    )
 
 
 def cleanup():
@@ -61,15 +40,31 @@ def cleanup():
 
 
 def main(args):
+    setup()
+
     device = torch.device(f"xpu:{RANK}")
-    print(f"Setting device: {device}")
-    torch.xpu.set_device(device)
+    print(f"Using device: {device}")
 
-    torch.distributed.init_process_group(backend="ccl")
-    torch.manual_seed(args.seed)
-
-    model = Aurora(use_lora=False, autocast=True).to(device)
+    print("loading model...")
+    model = Aurora(
+        use_lora=False, 
+        autocast=True,
+    )
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+
+    # Load data
+    static_vars_ds, surf_vars_ds, atmos_vars_ds = load_data()
+
+    # Get input
+    print(f"batching with {(int(RANK) * 2) + 1=}")
+    train_input = get_input_batch(
+        (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
+    ).to(device)
+
+    # Get output
+    train_gt = get_gt_batch(
+        (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
+    ).to(device)
     model.configure_activation_checkpointing()
 
     fsdp_kwargs = {}
@@ -78,47 +73,34 @@ def main(args):
             param_dtype=torch.bfloat16,
             reduce_dtype=torch.float32,
         )
-    fully_shard(model, **fsdp_kwargs)
 
+    fully_shard(model, **fsdp_kwargs).to(device)
     inspect_model(model)
-
-    if args.explicit_prefetching:
-        set_modules_to_forward_prefetch(model, num_to_forward_prefetch=2)
-        set_modules_to_backward_prefetch(model, num_to_backward_prefetch=2)
 
     if args.mixed_precision:
         inspect_mixed_precision(model)
 
-    optim = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    model.train()
+    
+    # AdamW, as used in the paper.
+    optim = torch.optim.AdamW(model.parameters())
 
-    # Load data
-    static_vars_ds, surf_vars_ds, atmos_vars_ds = load_data()
-
-    for i in range(10):
-        # Get input
-        train_input = get_input_batch(
-            i * 3, static_vars_ds, surf_vars_ds, atmos_vars_ds
-        )
-
-        # Get output
-        train_gt = get_gt_batch(i * 3, static_vars_ds, surf_vars_ds, atmos_vars_ds)
-
-        if args.explicit_prefetching:
-            model.unshard()
-
-        pred = model(train_input)
+    for _ in range(2):
+        # Forward pass
+        print("Performing forward pass...")
+        pred = model.forward(train_input)
         loss = mae(pred, train_gt)
         loss.backward()
+
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optim.step()
         optim.zero_grad()
 
-    destroy_process_group()
+    cleanup()
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="PyTorch FSDP2 example")
-    parser.add_argument("--explicit-prefetching", action="store_true", default=False)
     parser.add_argument("--mixed-precision", action="store_true", default=False)
     parser.add_argument("--dcp-api", action="store_true", default=False)
     parser.add_argument(
@@ -130,5 +112,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     os.environ.pop("ZE_AFFINITY_MASK", None)
-    WORLD_SIZE = torch.xpu.device_count()
     main(args)
