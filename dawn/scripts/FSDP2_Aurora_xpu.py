@@ -1,15 +1,31 @@
 import argparse
 import os
 
+import intel_extension_for_pytorch as ipex
+import oneccl_bindings_for_pytorch  # has side-effects
 import torch
-from aurora import Aurora
-from torch.distributed.fsdp import fully_shard, MixedPrecisionPolicy
-from fsdp_utils import inspect_mixed_precision, inspect_model
 import torch.distributed as dist
-
-from load_data import load_data
-from load_batches import get_gt_batch, get_input_batch
 from aurora_loss import mae
+from fsdp_utils import inspect_mixed_precision, inspect_model
+from load_batches import get_gt_batch, get_input_batch
+from load_data import load_data
+from torch.distributed import destroy_process_group, init_process_group
+from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
+
+from aurora import Aurora
+
+# PMI_RANK set by mpirun
+RANK = os.environ["PMI_RANK"]
+os.environ["RANK"] = RANK
+
+# PMI_SIZE set by mpirun
+WORLD_SIZE = os.environ["PMI_SIZE"]
+assert WORLD_SIZE == "2"
+os.environ["WORLD_SIZE"] = WORLD_SIZE
+
+os.environ["MASTER_ADDR"] = "0.0.0.0"
+os.environ["MASTER_PORT"] = "29876"
+USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
 
 def set_modules_to_forward_prefetch(model, num_to_forward_prefetch):
@@ -37,7 +53,7 @@ def setup(rank, world_size):
     os.environ["MASTER_PORT"] = "29500"  # your master port
 
     # initialize the process group by Intel® oneCCL Bindings for Pytorch\*
-    dist.init_process_group("ccl", rank=rank, world_size=world_size)
+    init_process_group("ccl", rank=rank, world_size=world_size)
 
 
 def cleanup():
@@ -45,18 +61,16 @@ def cleanup():
 
 
 def main(args):
-    rank = int(os.environ["LOCAL_RANK"])
-    
-    device = torch.device(f"xpu:{rank}")
+    device = torch.device(f"xpu:{RANK}")
     print(f"Setting device: {device}")
     torch.xpu.set_device(device)
 
-    torch.distributed.init_process_group(backend="nccl", device_id=device)
-    torch.manual_seed(0)
+    torch.distributed.init_process_group(backend="ccl")
+    torch.manual_seed(args.seed)
 
-    with torch.device("meta"):
-        model = Aurora(use_lora=False, autocast=True)
-        model.use_activation_checkpointing()
+    model = Aurora(use_lora=False, autocast=True).to(device)
+    model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    model.configure_activation_checkpointing()
 
     fsdp_kwargs = {}
     if args.mixed_precision:
@@ -64,8 +78,6 @@ def main(args):
             param_dtype=torch.bfloat16,
             reduce_dtype=torch.float32,
         )
-    for layer in model.layers:
-        fully_shard(layer, **fsdp_kwargs)
     fully_shard(model, **fsdp_kwargs)
 
     inspect_model(model)
@@ -73,7 +85,7 @@ def main(args):
     if args.explicit_prefetching:
         set_modules_to_forward_prefetch(model, num_to_forward_prefetch=2)
         set_modules_to_backward_prefetch(model, num_to_backward_prefetch=2)
-    
+
     if args.mixed_precision:
         inspect_mixed_precision(model)
 
@@ -84,10 +96,12 @@ def main(args):
 
     for i in range(10):
         # Get input
-        train_input = get_input_batch(i*3, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+        train_input = get_input_batch(
+            i * 3, static_vars_ds, surf_vars_ds, atmos_vars_ds
+        )
 
         # Get output
-        train_gt = get_gt_batch(i*3, static_vars_ds, surf_vars_ds, atmos_vars_ds)
+        train_gt = get_gt_batch(i * 3, static_vars_ds, surf_vars_ds, atmos_vars_ds)
 
         if args.explicit_prefetching:
             model.unshard()
@@ -99,7 +113,7 @@ def main(args):
         optim.step()
         optim.zero_grad()
 
-    torch.distributed.destroy_process_group()
+    destroy_process_group()
 
 
 if __name__ == "__main__":

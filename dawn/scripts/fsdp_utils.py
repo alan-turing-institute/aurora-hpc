@@ -1,11 +1,12 @@
 import torch
-from model import Transformer
 from torch.distributed.fsdp import FSDPModule
 from torch.distributed.tensor import Shard
 
+from aurora import Aurora
+
 
 def inspect_model(model: FSDPModule):
-    assert isinstance(model, Transformer)
+    assert isinstance(model, Aurora)
     assert isinstance(model, FSDPModule)
 
     if torch.distributed.get_rank() == 0:
