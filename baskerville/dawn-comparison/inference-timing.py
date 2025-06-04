@@ -90,7 +90,7 @@ def main(steps):
             times.append(time_end - time_start)
             time_start = time.time()
 
-    avg_time = sum(times) / len(times)
+    avg_time = sum(times[1:]) / len(times[1:]) # Exclude the first step time
     print(f"Average time for {steps} steps: {avg_time}")
 
     import pickle
