@@ -84,7 +84,7 @@ def main(steps):
             preds.append(pred.to("cpu"))
             time_end = time.time()
             print(f"Time for one step: {time_end - time_start}")
-            times.append(time_start - time_end)
+            times.append(time_end - time_start)
             time_start = time.time()
 
     avg_time = sum(times) / len(times)
