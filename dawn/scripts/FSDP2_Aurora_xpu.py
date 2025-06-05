@@ -1,5 +1,6 @@
 import argparse
 import os
+from functools import partial
 
 import intel_extension_for_pytorch as ipex
 import oneccl_bindings_for_pytorch  # has side-effects
@@ -11,6 +12,7 @@ from load_batches import get_gt_batch, get_input_batch
 from load_data import load_data
 from torch.distributed import destroy_process_group, init_process_group
 from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
+from torch.distributed.tensor import DeviceMesh, DTensor, Replicate, Shard
 
 from aurora import Aurora
 
@@ -20,7 +22,6 @@ os.environ["RANK"] = RANK
 
 # PMI_SIZE set by mpirun
 WORLD_SIZE = os.environ["PMI_SIZE"]
-assert WORLD_SIZE == "2"
 os.environ["WORLD_SIZE"] = WORLD_SIZE
 USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
@@ -41,31 +42,38 @@ def cleanup():
 
 def main(args):
     setup()
+    mesh = DeviceMesh("xpu", list(range(int(WORLD_SIZE))))
 
     device = torch.device(f"xpu:{RANK}")
     print(f"Using device: {device}")
 
     print("loading model...")
     model = Aurora(
-        use_lora=False, 
+        use_lora=False,
         autocast=True,
-    )
+    ).to(device)
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    model.configure_activation_checkpointing()
 
     # Load data
     static_vars_ds, surf_vars_ds, atmos_vars_ds = load_data()
 
     # Get input
     print(f"batching with {(int(RANK) * 2) + 1=}")
-    train_input = get_input_batch(
+    batch = get_input_batch(
         (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
-    ).to(device)
+    )
+
+    shard_from_local = partial(
+        DTensor.from_local, device_mesh=mesh, placements=[Replicate()]
+    )
+    batch_sharded = batch._fmap(shard_from_local)
 
     # Get output
     train_gt = get_gt_batch(
         (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
     ).to(device)
-    model.configure_activation_checkpointing()
+    train_gt_sharded = train_gt._fmap(shard_from_local)
 
     fsdp_kwargs = {}
     if args.mixed_precision:
@@ -74,24 +82,27 @@ def main(args):
             reduce_dtype=torch.float32,
         )
 
-    fully_shard(model, **fsdp_kwargs).to(device)
+    fully_shard(model, **fsdp_kwargs)
     inspect_model(model)
 
     if args.mixed_precision:
         inspect_mixed_precision(model)
 
     model.train()
-    
+
     # AdamW, as used in the paper.
     optim = torch.optim.AdamW(model.parameters())
 
     for _ in range(2):
+        optim.zero_grad()
+
         # Forward pass
         print("Performing forward pass...")
-        pred = model.forward(train_input)
-        loss = mae(pred, train_gt)
-        loss.backward()
+        pred = model.forward(batch)
 
+        loss = mae(pred, train_gt_sharded)
+        print("Running loss backward")
+        loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optim.step()
         optim.zero_grad()
