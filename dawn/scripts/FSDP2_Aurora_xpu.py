@@ -23,7 +23,6 @@ os.environ["RANK"] = RANK
 # PMI_SIZE set by mpirun
 WORLD_SIZE = os.environ["PMI_SIZE"]
 os.environ["WORLD_SIZE"] = WORLD_SIZE
-USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
 
 def setup():
@@ -42,18 +41,16 @@ def cleanup():
 
 def main(args):
     setup()
-    mesh = DeviceMesh("xpu", list(range(int(WORLD_SIZE))))
+    mesh = DeviceMesh("xpu", list(range(int(WORLD_SIZE))), mesh_dim_names=["model"])
 
-    device = torch.device("xpu:0")
-    print(
-        f"Using device: {device} with ZE_AFFINITY_MASK = {os.environ['ZE_AFFINITY_MASK']}"
-    )
+    device = torch.device(f"xpu:{RANK}")
+    print(f"Using device: {device}")
 
     print("loading model...")
     model = Aurora(
         use_lora=False,
         autocast=True,
-    )
+    ).to(device)
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
     model.configure_activation_checkpointing()
 
@@ -69,22 +66,26 @@ def main(args):
     shard_from_local = partial(
         DTensor.from_local, device_mesh=mesh, placements=[Replicate()]
     )
-    batch_sharded = batch._fmap(shard_from_local)
+    # batch_sharded = batch._fmap(shard_from_local)
 
     # Get output
     train_gt = get_gt_batch(
         (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
-    ).to(device)
+    )
+    # train_gt_sharded = train_gt._fmap(shard_from_local)
 
-    fsdp_kwargs = {}
+    fsdp_kwargs = {"mesh": mesh}
     if args.mixed_precision:
         fsdp_kwargs["mp_policy"] = MixedPrecisionPolicy(
             param_dtype=torch.bfloat16,
             reduce_dtype=torch.float32,
         )
 
-    print("sharding model...")
+    print("Sharding...")
+    for _, module in model.named_modules():
+        fully_shard(module, **fsdp_kwargs)
     fully_shard(model, **fsdp_kwargs)
+    print("Inspecting model..")
     inspect_model(model)
 
     if args.mixed_precision:
@@ -101,6 +102,7 @@ def main(args):
         # Forward pass
         print("Performing forward pass...")
         pred = model.forward(batch)
+
         loss = mae(pred, train_gt)
         print("Running loss backward")
         loss.backward()
@@ -123,6 +125,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # os.environ.pop("ZE_AFFINITY_MASK", None)
-    print(f"No of devices: {torch.xpu.device_count()}")
+    os.environ.pop("ZE_AFFINITY_MASK", None)
     main(args)
