@@ -57,7 +57,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-finetune-gpu.txt &
 vmstat -t 1 -y > log-finetune-cpu.txt &
 
 # Perform the prediction
-python -m torch.distributed.run --nnodes 1 --nproc-per-node 2 finetune-fsdp.py
+python -m torch.distributed.run --nnodes 1 --nproc-per-node 2 finetune-ddp.py
 
 echo
 echo "## Tidying up"
