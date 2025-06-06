@@ -14,18 +14,6 @@ import torch.distributed as dist
 import torch.nn as nn
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-# PMI_RANK set by mpirun
-RANK = os.environ["PMI_RANK"]
-os.environ["RANK"] = RANK
-
-# PMI_SIZE set by mpirun
-WORLD_SIZE = os.environ["PMI_SIZE"]
-assert WORLD_SIZE == "2"
-os.environ["WORLD_SIZE"] = WORLD_SIZE
-
-os.environ["MASTER_ADDR"] = "0.0.0.0"  # your master address
-os.environ["MASTER_PORT"] = "29500"  # your master port
-
 
 class Model(nn.Module):
     def __init__(self):
@@ -41,30 +29,34 @@ if __name__ == "__main__":
     os.environ.pop("ZE_AFFINITY_MASK", None)
 
     torch.xpu.manual_seed(123)  # set a seed number
-    if int(WORLD_SIZE) > 0:
-        os.environ["RANK"] = str(RANK)
-        os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
+    mpi_world_size = int(os.environ.get("PMI_SIZE", -1))
+    mpi_rank = int(os.environ.get("PMI_RANK", -1))
+    if mpi_world_size > 0:
+        os.environ["RANK"] = str(mpi_rank)
+        os.environ["WORLD_SIZE"] = str(mpi_world_size)
     else:
         # set the default rank and world size to 0 and 1
         os.environ["RANK"] = str(os.environ.get("RANK", 0))
         os.environ["WORLD_SIZE"] = str(os.environ.get("WORLD_SIZE", 1))
+    os.environ["MASTER_ADDR"] = "127.0.0.1"  # your master address
+    os.environ["MASTER_PORT"] = "29500"  # your master port
 
     # Initialize the process group with ccl backend
     dist.init_process_group(backend="ccl")
 
     # For single-node distributed training, local_rank is the same as global rank
     local_rank = dist.get_rank()
-    print(f"{local_rank=}, {type(local_rank)=}")
-    print(f"{RANK=}")
+    print(f"local rank: {local_rank}")
     print(f"Available devices: {torch.xpu.device_count()}")
 
     # Only set device for distributed training on GPU
     device = torch.device(f"xpu:{local_rank}")
     # device = "xpu"
     print(f"Sending to device: {device}")
-    # torch.xpu.set_device(device) # still errors
-    model = Model().to(device)
-    model = DDP(model).to(device)
+    torch.xpu.set_device(device)
+    model = Model()
+    if dist.get_world_size() > 1:
+        model = DDP(model).to(device)
 
     optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
     loss_fn = nn.MSELoss()
@@ -76,6 +68,14 @@ if __name__ == "__main__":
         input = torch.randn(2, 4).to(device)
         labels = torch.randn(2, 5).to(device)
         # forward
+        print(
+            f"[Rank {local_rank}] input shape: {input.shape}, input device: {input.device}"
+        )
+        print(
+            f"[Rank {local_rank}] label shape: {labels.shape}, label device: {labels.device}"
+        )
+        print(f"[Rank {local_rank}] model device: {next(model.parameters()).device}")
+
         print("Runing forward: {} on device {}".format(i, device))
         res = model(input)
         # loss
