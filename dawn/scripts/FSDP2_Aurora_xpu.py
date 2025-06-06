@@ -44,14 +44,16 @@ def main(args):
     setup()
     mesh = DeviceMesh("xpu", list(range(int(WORLD_SIZE))))
 
-    device = torch.device(f"xpu:{RANK}")
-    print(f"Using device: {device}")
+    device = torch.device("xpu:0")
+    print(
+        f"Using device: {device} with ZE_AFFINITY_MASK = {os.environ['ZE_AFFINITY_MASK']}"
+    )
 
     print("loading model...")
     model = Aurora(
         use_lora=False,
         autocast=True,
-    ).to(device)
+    )
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
     model.configure_activation_checkpointing()
 
@@ -73,7 +75,6 @@ def main(args):
     train_gt = get_gt_batch(
         (int(RANK) * 2) + 1, static_vars_ds, surf_vars_ds, atmos_vars_ds
     ).to(device)
-    train_gt_sharded = train_gt._fmap(shard_from_local)
 
     fsdp_kwargs = {}
     if args.mixed_precision:
@@ -82,6 +83,7 @@ def main(args):
             reduce_dtype=torch.float32,
         )
 
+    print("sharding model...")
     fully_shard(model, **fsdp_kwargs)
     inspect_model(model)
 
@@ -99,8 +101,7 @@ def main(args):
         # Forward pass
         print("Performing forward pass...")
         pred = model.forward(batch)
-
-        loss = mae(pred, train_gt_sharded)
+        loss = mae(pred, train_gt)
         print("Running loss backward")
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -122,5 +123,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    os.environ.pop("ZE_AFFINITY_MASK", None)
+    # os.environ.pop("ZE_AFFINITY_MASK", None)
+    print(f"No of devices: {torch.xpu.device_count()}")
     main(args)
