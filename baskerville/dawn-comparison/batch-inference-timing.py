@@ -6,11 +6,12 @@
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
+#SBATCH --constraint=a100_80
 #SBATCH --job-name auroria-comparison
 #SBATCH --output log-timing.txt
 
 # Execute using:
-# sbatch ./batch-comparison.sh
+# sbatch ./batch-inference-timing.sh
 
 echo
 echo "## Aurora inference timing script starting"

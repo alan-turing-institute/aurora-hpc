@@ -6,6 +6,7 @@
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
+#SBATCH --mem 32768
 #SBATCH --job-name auroria-comparison
 #SBATCH --output log-comparison.txt
 
