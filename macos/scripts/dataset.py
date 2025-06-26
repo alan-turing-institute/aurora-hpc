@@ -35,75 +35,61 @@ class AuroraDataset(Dataset):
         self.static_vars_ds = xr.open_dataset(data_path / static_filepath, engine="netcdf4")
         self.surf_vars_ds = xr.open_dataset(data_path / surface_filepath, engine="netcdf4")
         self.atmos_vars_ds = xr.open_dataset(data_path / atmos_filepath, engine="netcdf4")
-        self.length = len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t
+        self.length = len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1
+
+    def _get_batch(self, index, timerange):
+        """Returns a batch covering a time range.
+
+        Args:
+            timerange (int): the range of values over time to return in the batch.
+        """
+        return Batch(
+            surf_vars={
+                # First select time points `index` and `index - 1`. Afterwards, `[None]` inserts a
+                # batch dimension of size one.
+                "2t": torch.from_numpy(self.surf_vars_ds["t2m"].values[timerange][None]),
+                "10u": torch.from_numpy(self.surf_vars_ds["u10"].values[timerange][None]),
+                "10v": torch.from_numpy(self.surf_vars_ds["v10"].values[timerange][None]),
+                "msl": torch.from_numpy(self.surf_vars_ds["msl"].values[timerange][None]),
+            },
+            static_vars={
+                # The static variables are constant, so we just get them for the first time.
+                "z": torch.from_numpy(self.static_vars_ds["z"].values[0]),
+                "slt": torch.from_numpy(self.static_vars_ds["slt"].values[0]),
+                "lsm": torch.from_numpy(self.static_vars_ds["lsm"].values[0]),
+            },
+            atmos_vars={
+                "t": torch.from_numpy(self.atmos_vars_ds["t"].values[timerange][None]),
+                "u": torch.from_numpy(self.atmos_vars_ds["u"].values[timerange][None]),
+                "v": torch.from_numpy(self.atmos_vars_ds["v"].values[timerange][None]),
+                "q": torch.from_numpy(self.atmos_vars_ds["q"].values[timerange][None]),
+                "z": torch.from_numpy(self.atmos_vars_ds["z"].values[timerange][None]),
+            },
+            metadata=Metadata(
+                lat=torch.from_numpy(self.surf_vars_ds.latitude.values),
+                lon=torch.from_numpy(self.surf_vars_ds.longitude.values),
+                # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
+                # `datetime.datetime`s. Note that this needs to be a tuple of length one:
+                # one value for every batch element.
+                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[index],),
+                atmos_levels=tuple(int(level) for level in self.atmos_vars_ds.pressure_level.values),
+            ),
+        )
 
     def __getitem__(self, index):
+        """Returns input and target batches for the given index.
+
+        Args:
+            index (int): the index of the batch to retreive.
+        """
         timerange = [t + index for t in range(self.t + 1)]
-        input = Batch(
-            surf_vars={
-                # First select time points `index` and `index - 1`. Afterwards, `[None]` inserts a
-                # batch dimension of size one.
-                "2t": torch.from_numpy(self.surf_vars_ds["t2m"].values[timerange][None]),
-                "10u": torch.from_numpy(self.surf_vars_ds["u10"].values[timerange][None]),
-                "10v": torch.from_numpy(self.surf_vars_ds["v10"].values[timerange][None]),
-                "msl": torch.from_numpy(self.surf_vars_ds["msl"].values[timerange][None]),
-            },
-            static_vars={
-                # The static variables are constant, so we just get them for the first time.
-                "z": torch.from_numpy(self.static_vars_ds["z"].values[0]),
-                "slt": torch.from_numpy(self.static_vars_ds["slt"].values[0]),
-                "lsm": torch.from_numpy(self.static_vars_ds["lsm"].values[0]),
-            },
-            atmos_vars={
-                "t": torch.from_numpy(self.atmos_vars_ds["t"].values[timerange][None]),
-                "u": torch.from_numpy(self.atmos_vars_ds["u"].values[timerange][None]),
-                "v": torch.from_numpy(self.atmos_vars_ds["v"].values[timerange][None]),
-                "q": torch.from_numpy(self.atmos_vars_ds["q"].values[timerange][None]),
-                "z": torch.from_numpy(self.atmos_vars_ds["z"].values[timerange][None]),
-            },
-            metadata=Metadata(
-                lat=torch.from_numpy(self.surf_vars_ds.latitude.values),
-                lon=torch.from_numpy(self.surf_vars_ds.longitude.values),
-                # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-                # `datetime.datetime`s. Note that this needs to be a tuple of length one:
-                # one value for every batch element.
-                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[index],),
-                atmos_levels=tuple(int(level) for level in self.atmos_vars_ds.pressure_level.values),
-            ),
-        )
-        target = Batch(
-            surf_vars={
-                # First select time points `index` and `index - 1`. Afterwards, `[None]` inserts a
-                # batch dimension of size one.
-                "2t": torch.from_numpy(self.surf_vars_ds["t2m"].values[timerange][None]),
-                "10u": torch.from_numpy(self.surf_vars_ds["u10"].values[timerange][None]),
-                "10v": torch.from_numpy(self.surf_vars_ds["v10"].values[timerange][None]),
-                "msl": torch.from_numpy(self.surf_vars_ds["msl"].values[timerange][None]),
-            },
-            static_vars={
-                # The static variables are constant, so we just get them for the first time.
-                "z": torch.from_numpy(self.static_vars_ds["z"].values[0]),
-                "slt": torch.from_numpy(self.static_vars_ds["slt"].values[0]),
-                "lsm": torch.from_numpy(self.static_vars_ds["lsm"].values[0]),
-            },
-            atmos_vars={
-                "t": torch.from_numpy(self.atmos_vars_ds["t"].values[timerange][None]),
-                "u": torch.from_numpy(self.atmos_vars_ds["u"].values[timerange][None]),
-                "v": torch.from_numpy(self.atmos_vars_ds["v"].values[timerange][None]),
-                "q": torch.from_numpy(self.atmos_vars_ds["q"].values[timerange][None]),
-                "z": torch.from_numpy(self.atmos_vars_ds["z"].values[timerange][None]),
-            },
-            metadata=Metadata(
-                lat=torch.from_numpy(self.surf_vars_ds.latitude.values),
-                lon=torch.from_numpy(self.surf_vars_ds.longitude.values),
-                # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-                # `datetime.datetime`s. Note that this needs to be a tuple of length one:
-                # one value for every batch element.
-                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[index],),
-                atmos_levels=tuple(int(level) for level in self.atmos_vars_ds.pressure_level.values),
-            ),
-        )
-        return batch
+        input = self._get_batch(index, timerange)
+        # In case the `t` dimentions is needed for comparison with the output of the model
+        #target = self._get_batch(index, [self.t + 1])
+        target = self._get_batch(index, self.t + 1)
+        return input, target
 
     def __len__(self):
+        """Returns the total number of batches available.
+        """
         return self.length
