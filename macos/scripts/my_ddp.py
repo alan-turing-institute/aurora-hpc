@@ -6,16 +6,14 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-import xarray as xr
 from aurora_loss import mae
-from load_batches import get_gt_batch, get_input_batch
 from load_data import load_data
 from torch.distributed import init_process_group
 from torch.utils.data import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 
-from aurora import Aurora, Batch, Metadata
+from aurora import Aurora
 from dataset import AuroraDataset
 
 # PMI_RANK set by mpirun
@@ -45,8 +43,15 @@ class Model(nn.Module):
 
 def main():
     print("Initialising process group with backend", "ccl", flush=True)
+
+    world_size = os.environ["WORLD_SIZE"]
+    rank = os.environ["RANK"]
+
+    # ToDo Run 2 or more processes.
     init_process_group(
-        backend="ccl",
+        world_size=int(world_size),
+        rank=int(rank),
+        backend="gloo",
     )
 
     device = f"xpu:{RANK}"
@@ -66,17 +71,6 @@ def main():
     # 1 for RANK 0 and 3 for RANK 1.
     i = (int(RANK) * 2) + 1
     print(f"batching with {i=}")
-
-    # Load data
-    static_vars_ds, surf_vars_ds, atmos_vars_ds = load_data(download_path)
-
-    # Get input
-    batch = get_input_batch(i, static_vars_ds, surf_vars_ds, atmos_vars_ds).to(device)
-
-    # Get output
-    ground_truth = get_gt_batch(i, static_vars_ds, surf_vars_ds, atmos_vars_ds).to(
-        device
-    )
 
     print("preparing model...")
     model.configure_activation_checkpointing()
@@ -101,20 +95,23 @@ def main():
         sampler=sampler,
     )
 
-    # for _ in range(2):
-    for sample, label in data_loader:
+    for epoch, (X, y) in enumerate(data_loader):
+        print(f"epoch {epoch}...")
+
         # Not really necessary, for one forward pass.
         optimizer.zero_grad()
 
         print("performing forward pass...")
-        pred = model.forward(batch)
+        pred = model(X)
 
         # space constraints
         # pred = pred.to("cpu")
 
         # mean absolute error of one variable
         print("calculating loss...")
-        loss = mae(pred, ground_truth)
+
+        # Todo: Are pred's of type PyTree and does it matter?
+        loss = mae(pred, y)
 
         print("performing backward pass...")
         loss.backward()

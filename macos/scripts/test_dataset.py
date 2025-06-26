@@ -11,7 +11,7 @@ class TestDataset(unittest.TestCase):
             surface_filepath=Path("small-surface-level.nc"),
             atmos_filepath=Path("small-atmospheric.nc"),
         )
-        self.assertEqual(len(dataset), 31)
+        self.assertEqual(len(dataset), 30)
 
         dataset = AuroraDataset(
             data_path=Path("../era5/test"),
@@ -20,39 +20,28 @@ class TestDataset(unittest.TestCase):
             surface_filepath=Path("small-surface-level.nc"),
             atmos_filepath=Path("small-atmospheric.nc"),
         )
-        self.assertEqual(len(dataset), 32)
+        self.assertEqual(len(dataset), 31)
 
     def test_get_item(self):
-        dataset = AuroraDataset(
-            data_path=Path("../era5/test"),
-            t=1,
-            static_filepath=Path("small-static.nc"),
-            surface_filepath=Path("small-surface-level.nc"),
-            atmos_filepath=Path("small-atmospheric.nc"),
-        )
-        batch = dataset[0]
-        self.assertIn("2t", batch.surf_vars.keys())
-        self.assertEqual(
-            # (b, t, h, w)
-            batch.surf_vars["2t"].shape, (1, 2, 2, 2)  
+        for in_t, out_t in [(1, 2), (2, 3)]:
+            for var_name in ["2t", "10u", "10v", "msl"]:
+                dataset = AuroraDataset(
+                    data_path=Path("../era5/test"),
+                    t=in_t,
+                    static_filepath=Path("small-static.nc"),
+                    surface_filepath=Path("small-surface-level.nc"),
+                    atmos_filepath=Path("small-atmospheric.nc"),
+                )
+                X, y = dataset[0]
+                self.assertEqual(
+                    # (b, t, h, w)
+                    X.surf_vars[var_name].shape, (1, out_t, 2, 2)  
 
-        )
+                )
+                self.assertEqual(
+                    y.surf_vars[var_name].shape, (1, 2, 2)  
+                )
         
-    def test_get_item_2(self):
-        dataset = AuroraDataset(
-            data_path=Path("../era5/test"),
-            t=2,
-            static_filepath=Path("small-static.nc"),
-            surface_filepath=Path("small-surface-level.nc"),
-            atmos_filepath=Path("small-atmospheric.nc"),
-        )
-        batch = dataset[0]
-        self.assertIn("10u", batch.surf_vars.keys())
-        self.assertEqual(
-            # (b, t, h, w)
-            batch.surf_vars["10u"].shape, (1, 3, 2, 2)  
-
-        )
 
 if __name__ == "__main__":
     unittest.main()

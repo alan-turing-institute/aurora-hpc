@@ -1,9 +1,10 @@
 """Loss functions for Aurora model training."""
 
 import torch
+from aurora import Batch
 
 
-def mae(x_hat_t, x_t):
+def mae(x_hat_t: Batch, x_t: Batch) -> torch.Tensor:
     lamb = 2
     vs_va = 9
     surface = {
@@ -19,7 +20,7 @@ def mae(x_hat_t, x_t):
         "u": 0.87,
         "v": 0.6,
     }
-    foo = sum(
+    foo = torch.Tensor(
         [
             (v / (720 * 1440))
             * torch.sum(
@@ -27,8 +28,8 @@ def mae(x_hat_t, x_t):
             )
             for k, v in surface.items()
         ]
-    )
-    bar = sum(
+    ).sum()
+    bar = torch.Tensor(
         [
             (v / (720 * 1440 * 13))
             * torch.sum(
@@ -36,7 +37,7 @@ def mae(x_hat_t, x_t):
             )
             for k, v in atmos.items()
         ]
-    )
+    ).sum()
 
     alpha = 0.25
 
