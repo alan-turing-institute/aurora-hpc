@@ -31,6 +31,17 @@ os.environ["MASTER_PORT"] = "29876"
 USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
 
+class Model(nn.Module):
+    def __init__(self):
+        super(Model, self).__init__()
+        self.l1 = nn.Linear(5000, 5000)
+        self.l2 = nn.Linear(5000, 5000)
+        self.l3 = nn.Linear(5000, 5000)
+
+    def forward(self, input):
+        return self.l3(self.l2(self.l1(input)))
+
+
 def main():
     print("Initialising process group with backend", "ccl", flush=True)
     init_process_group(
