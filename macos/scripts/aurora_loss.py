@@ -20,24 +20,24 @@ def mae(x_hat_t: Batch, x_t: Batch) -> torch.Tensor:
         "u": 0.87,
         "v": 0.6,
     }
-    foo = torch.Tensor(
+    foo = sum(
         [
             (v / (720 * 1440))
             * torch.sum(
-                torch.abs(x_hat_t.surf_vars[k] - x_t.surf_vars[k][:, :, :720, :])
+                torch.abs(x_hat_t.surf_vars[k] - x_t.surf_vars[k][:, :720, :])
             )
             for k, v in surface.items()
         ]
-    ).sum()
-    bar = torch.Tensor(
+    )
+    bar = sum(
         [
             (v / (720 * 1440 * 13))
             * torch.sum(
-                torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:, :, :, :720, :])
+                torch.abs(x_hat_t.atmos_vars[k] - x_t.atmos_vars[k][:, :, :720, :])
             )
             for k, v in atmos.items()
         ]
-    ).sum()
+    )
 
     alpha = 0.25
 
