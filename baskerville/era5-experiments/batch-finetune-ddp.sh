@@ -4,22 +4,23 @@
 #SBATCH --account usjs9456-ati-test
 #SBATCH --time 0:10:0
 #SBATCH --nodes 1
-#SBATCH --gpus 1
+#SBATCH --gpus-per-node 2
 #SBATCH --cpus-per-gpu 36
 #SBATCH --mem 32768
-#SBATCH --job-name auroria-comparison
-#SBATCH --output log-comparison.txt
+#SBATCH --constraint=a100_80
+#SBATCH --job-name auroria-finetune
+#SBATCH --output log-finetune.txt
 
 # Execute using:
-# sbatch ./batch-comparison.sh
+# sbatch ./batch-finetune.sh
 
 echo
-echo "## Aurora comparison script starting"
+echo "## Aurora fine-tuning script starting"
 
 # Quit on error
 set -e
 
-if [ ! -d ../era5-experiments/downloads ]; then
+if [ ! -d downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -32,6 +33,11 @@ module -q load baskerville
 module -q load bask-apps/live
 module -q load matplotlib/3.7.2-gfbf-2023a
 module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
+
+echo
+echo "## Configuring environment"
+
+export OMP_NUM_THREADS=1
 
 echo
 echo "## Initialising virtual environment"
@@ -47,14 +53,11 @@ echo
 echo "## Running model"
 
 # Track GPU and CPU metrics
-nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
-vmstat -t 1 -y > log-comparison-cpu.txt &
+nvidia-smi dmon -o TD -s puct -d 1 > log-finetune-gpu.txt &
+vmstat -t 1 -y > log-finetune-cpu.txt &
 
 # Perform the prediction
-python comparison.py 28
-
-# Generate graphs
-python compare-results.py
+python -m torch.distributed.run --nnodes 1 --nproc-per-node 2 finetune-ddp.py
 
 echo
 echo "## Tidying up"
@@ -62,4 +65,4 @@ echo "## Tidying up"
 deactivate
 
 echo
-echo "## Aurora comparison script completed"
+echo "## Aurora fine-tuning script completed"

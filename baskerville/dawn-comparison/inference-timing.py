@@ -1,20 +1,23 @@
-"""Do a rollout with Aurora to predict the weather."""
+#!/usr/bin/env python
+# vim: et:ts=4:sts=4:sw=4
+
+# SPDX-License-Identifier: MIT
+# Copyright 2025 The Alan Turing Institute
 
 import logging
 import sys
 import time
 
-print("Importing ipex")
 from pathlib import Path
 
-import intel_extension_for_pytorch as ipex
 import torch
 import xarray as xr
 
 from aurora import Batch, Metadata
 
 # Data will be downloaded here.
-download_path = Path("../era5/era_v_inf")
+download_path = Path("../era5-experiments/downloads")
+download_path = download_path.expanduser()
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
 surf_vars_ds = xr.open_dataset(
@@ -72,7 +75,7 @@ def main(steps):
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 
     model.eval()
-    model = model.to("xpu")
+    model = model.to("cuda")
 
     print("doing rollout")
     preds = []
@@ -87,7 +90,7 @@ def main(steps):
             times.append(time_end - time_start)
             time_start = time.time()
 
-    avg_time = sum(times[1:]) / len(times[1:])  # Exclude the first step time
+    avg_time = sum(times[1:]) / len(times[1:]) # Exclude the first step time
     print(f"Average time for last {steps - 1} steps: {avg_time}")
     print(f"Total time for {steps} steps: {sum(times)}")
 
@@ -95,10 +98,6 @@ def main(steps):
 
     end_time_total = time.time()
     print(f"Total time: {end_time_total - start_time_total}")
-
-
-#    with open("preds.pkl", "wb") as f:
-#        pickle.dump(preds, f)
 
 
 if __name__ == "__main__":

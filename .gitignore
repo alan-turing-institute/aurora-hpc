@@ -187,3 +187,9 @@ slurm-*.out
 log-*.txt
 log-*.txt.stats
 .*.swp
+
+# Generated diagrams
+baskerville/dawn-comparison/*.png
+baskerville/dawn-comparison/*.pdf
+baskerville/dawn-comparison/dawn-code
+

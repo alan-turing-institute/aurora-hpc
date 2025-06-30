@@ -61,13 +61,46 @@ def calculate_rmse(preds0, preds1):
 def calculate_difference(vars0, vars1):
     return abs(vars0 - vars1)
 
+def plot_error_comparison(preds_dawn, preds_bask, filename):
+    print("Plotting graph: {}".format(filename))
+    fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
+    rmse = []
+
+    step = 27
+    vmin = 0
+    vmax = 5
+
+    for step in range(1, 28):
+        vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
+        vars_preds_bask = preds_bask[step].surf_vars["2t"][0, 0].numpy()
+        vars_actual = surf_vars_ds["t2m"][2 + step][0:720,:].values
+
+        diff_dawn_bask_pred = calculate_difference(
+            vars_preds_dawn,
+            vars_preds_bask,
+        )
+        rmse_dawn_bask_pred = calculate_rmse(
+            vars_preds_dawn,
+            vars_preds_bask,
+        )
+        rmse.append(rmse_dawn_bask_pred)
+
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.plot(rmse, linestyle="", marker="x")
+
+    ax.set_xlabel("Rollout step")
+    ax.set_ylabel("Root Mean Square Error")
+
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300)
+
 def plot_errors(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
 
     step = 27
     vmin = 0
-    vmax = 5
+    #vmax = 5
 
     vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
     vars_preds_bask = preds_bask[step].surf_vars["2t"][0, 0].numpy()
@@ -81,7 +114,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
         preds_dawn[step].surf_vars["2t"][0, 0].numpy(),
         vars_actual,
     )
-    print("RMSE prediction vs. actual on DAWN: {}".format(rmse_pred_actual_dawn))
+    print("RMSE prediction vs. actual on DAWN (step {}): {}".format(step, rmse_pred_actual_dawn))
 
     diff_pred_actual_bask = calculate_difference(
         vars_preds_bask,
@@ -91,7 +124,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
         vars_preds_bask,
         vars_actual,
     )
-    print("RMSE prediction vs. actual on Baskerville: {}".format(rmse_pred_actual_bask))
+    print("RMSE prediction vs. actual on Baskerville (step {}): {}".format(step, rmse_pred_actual_bask))
 
     diff_dawn_bask_pred = calculate_difference(
         vars_preds_dawn,
@@ -101,7 +134,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
         vars_preds_dawn,
         vars_preds_bask,
     )
-    print("RMSE DAWN vs. Baskerville on Predictions: {}".format(rmse_dawn_bask_pred))
+    print("RMSE DAWN vs. Baskerville on Predictions (step {}): {}".format(step, rmse_dawn_bask_pred))
 
     diff_dawn_bask_actual = calculate_difference(
         vars_actual,
@@ -111,37 +144,43 @@ def plot_errors(preds_dawn, preds_bask, filename):
         vars_actual,
         vars_actual,
     )
-    print("RMSE DAWN vs. Baskerville on Actual: {}".format(rmse_dawn_bask_actual))
+    print("RMSE DAWN vs. Baskerville on Actual (step {}): {}".format(step, rmse_dawn_bask_actual))
 
-    ax[0, 0].imshow(diff_pred_actual_dawn, vmin=vmin, vmax=vmax)
+    img = ax[0, 0].imshow(diff_pred_actual_dawn, vmin=vmin)
     ax[0, 0].set_ylabel(str(preds_dawn[step].metadata.time[0]))
     ax[0, 0].set_xlabel("RMSE: {:1.5f}".format(rmse_pred_actual_dawn))
-    ax[0, 0].set_title("Error Aurora Prediction vs. ERA5 on DAWN")
+    ax[0, 0].set_title("Error on DAWN")
     ax[0, 0].set_xticks([])
     ax[0, 0].set_yticks([])
+    c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    ax[0, 1].imshow(diff_pred_actual_bask, vmin=vmin, vmax=vmax)
-    ax[0, 1].set_title("Error Aurora Prediction vs. ERA5 on Baskerville")
+    img = ax[0, 1].imshow(diff_pred_actual_bask, vmin=vmin)
+    ax[0, 1].set_title("Error on Baskerville")
     ax[0, 1].set_xlabel("RMSE: {:1.5f}".format(rmse_pred_actual_bask))
     ax[0, 1].set_xticks([])
     ax[0, 1].set_yticks([])
+    c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    ax[1, 0].imshow(diff_dawn_bask_pred, vmin=vmin, vmax=vmax)
+    img = ax[1, 0].imshow(diff_dawn_bask_pred, vmin=vmin)
     ax[1, 0].set_ylabel(str(preds_bask[step].metadata.time[0]))
-    ax[1, 0].set_title("Error DAWN vs. Baskerville on Predictions")
+    ax[1, 0].set_title("DAWN vs. Baskerville on Predictions")
     ax[1, 0].set_xlabel("RMSE: {:1.5f}".format(rmse_dawn_bask_pred))
     ax[1, 0].set_xticks([])
     ax[1, 0].set_yticks([])
+    c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    ax[1, 1].imshow(diff_dawn_bask_actual, vmin=vmin, vmax=vmax)
-    ax[1, 1].set_title("Error DAWN vs. Baskerville on Actual")
+    img = ax[1, 1].imshow(diff_dawn_bask_actual, vmin=vmin)
+    ax[1, 1].set_title("DAWN vs. Baskerville on Actual")
     ax[1, 1].set_xlabel("RMSE: {:1.5f}".format(rmse_dawn_bask_actual))
     ax[1, 1].set_xticks([])
     ax[1, 1].set_yticks([])
+    c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
+
 
     #plt.tight_layout()
     #fig.suptitle("Absolute error comparison for two-meter temperature in K ranged (0, 5) at rollout step 28")
-    plt.savefig(filename, dpi=300)
+    plt.tight_layout()
+    plt.savefig(filename, dpi=300, )
 
 def plot_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -290,6 +329,8 @@ plot_predict_vs_ground(preds_dawn, "plot-pvg-dawn.png")
 plot_predict_vs_ground(preds_bask, "plot-pvg-bask.png")
 plot_errors(preds_dawn, preds_bask, "plot-errors.pdf")
 plot_errors(preds_dawn, preds_bask, "plot-errors.png")
+plot_error_comparison(preds_dawn, preds_bask, "plot-error-comparison.pdf")
+plot_error_comparison(preds_dawn, preds_bask, "plot-error-comparison.png")
 plot_losses(preds_dawn, preds_bask, "plot-losses.pdf")
 plot_losses(preds_dawn, preds_bask, "plot-losses.png")
 plot_var_losses(preds_dawn, preds_bask, "plot-var-losses.pdf")

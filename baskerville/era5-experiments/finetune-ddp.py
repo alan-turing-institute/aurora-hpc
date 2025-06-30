@@ -13,19 +13,20 @@ import torch.distributed as dist
 from aurora import Aurora, AuroraSmall, rollout, Batch, Metadata
 from pathlib import Path
 from torch import nn, optim
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import ShardingStrategy
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 def print_memory_usage():
     print("Rank {} CUDA memory usage: {:.2f} GiB".format(os.environ["RANK"], torch.cuda.memory_allocated() / (1024**3)))
 
-print("init")
-print("World size: {}".format(os.environ['WORLD_SIZE']))
-print("Rank: {}".format(os.environ["RANK"]))
-
 world_size = int(os.environ['WORLD_SIZE'])
 rank = int(os.environ["RANK"])
 local_rank = int(os.environ["LOCAL_RANK"])
+
+print("init")
+print("World size: {}".format(world_size))
+print("Rank: {}".format(rank))
+print("Local rank: {}".format(local_rank))
+
 dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
 def mae(x_hat_t, x_t):
@@ -65,24 +66,24 @@ def mae(x_hat_t, x_t):
 # Fine-Tuning
 # See https://microsoft.github.io/aurora/finetuning.html
 
-
 print("loading model...")
 model = Aurora(
 #model = AuroraSmall(
     use_lora=False,  # Model was not fine-tuned.
     autocast=True,  # Use AMP.
 )
-model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 #model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
+model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 torch.cuda.set_device(local_rank)
 model.configure_activation_checkpointing()
-#model.to(local_rank)
-model = FSDP(
+model.to(local_rank)
+#model = DDP(
+#    model,
+#    device_ids=[local_rank],
+#)
+model = DDP(
     model,
-    device_id=local_rank,
-    use_orig_params=True,
-    sharding_strategy=ShardingStrategy.NO_SHARD,
-)
+).to(local_rank)
 
 # Data will be downloaded here.
 download_path = Path("./downloads")
@@ -93,11 +94,9 @@ static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
 surf_vars_ds = xr.open_dataset(download_path / "2023-01-01-surface-level.nc", engine="netcdf4")
 atmos_vars_ds = xr.open_dataset(download_path / "2023-01-01-atmospheric.nc", engine="netcdf4")
 
-# Select this time index in the downloaded data.
-idx = 0
+i = 1 + rank  # Select this time index in the downloaded data.
 
 print("batching...")
-i = 1 + (idx * world_size) + rank
 batch = Batch(
     surf_vars={
         # First select time points `i` and `i - 1`. Afterwards, `[None]` inserts a
@@ -154,8 +153,15 @@ with torch.autocast(device_type="cuda"):
     print("calculating loss...")
     loss = mae(pred, batch)
 
-    loss = loss.to(local_rank)
-    pred = pred.to(local_rank)
+    #loss = loss.to(local_rank)
+    #pred = pred.to(local_rank)
+    #batch = batch.to(local_rank)
+    #pred = pred.to("cpu")
+    #batch = batch.to("cpu")
+
+#print("emptying cache...")
+#print_memory_usage()
+#torch.cuda.empty_cache()
 
 print("performing backward pass...")
 print_memory_usage()

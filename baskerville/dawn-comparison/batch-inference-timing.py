@@ -6,15 +6,15 @@
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
-#SBATCH --mem 32768
+#SBATCH --constraint=a100_80
 #SBATCH --job-name auroria-comparison
-#SBATCH --output log-comparison.txt
+#SBATCH --output log-timing.txt
 
 # Execute using:
-# sbatch ./batch-comparison.sh
+# sbatch ./batch-inference-timing.sh
 
 echo
-echo "## Aurora comparison script starting"
+echo "## Aurora inference timing script starting"
 
 # Quit on error
 set -e
@@ -51,10 +51,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
 vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
-python comparison.py 28
-
-# Generate graphs
-python compare-results.py
+python inference-timing.py 28
 
 echo
 echo "## Tidying up"
@@ -62,4 +59,4 @@ echo "## Tidying up"
 deactivate
 
 echo
-echo "## Aurora comparison script completed"
+echo "## Aurora inference-timing script completed"

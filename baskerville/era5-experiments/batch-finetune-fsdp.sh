@@ -4,8 +4,9 @@
 #SBATCH --account usjs9456-ati-test
 #SBATCH --time 0:10:0
 #SBATCH --nodes 1
-#SBATCH --gpus 4
+#SBATCH --gpus-per-node 2
 #SBATCH --cpus-per-gpu 36
+#SBATCH --mem 32768
 #SBATCH --constraint=a100_80
 #SBATCH --job-name auroria-finetune
 #SBATCH --output log-finetune.txt
@@ -56,7 +57,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-finetune-gpu.txt &
 vmstat -t 1 -y > log-finetune-cpu.txt &
 
 # Perform the prediction
-python -m torch.distributed.run --nnodes 1 --nproc-per-node 4 finetune-fsdp.py
+python -m torch.distributed.run --nnodes 1 --nproc-per-node 2 finetune-fsdp.py
 
 echo
 echo "## Tidying up"
