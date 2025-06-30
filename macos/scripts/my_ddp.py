@@ -8,55 +8,53 @@ import time
 import torch
 import torch.nn as nn
 from aurora_loss import mae
-from load_data import load_data
-from torch.distributed import init_process_group
+from torch.distributed import init_process_group, destroy_process_group
 from torch.utils.data import DistributedSampler
-from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
 from torch.utils.data import DataLoader
 
 from aurora import Aurora
 from dataset import AuroraDataset
 
-# PMI_RANK set by mpirun
-RANK = os.environ["PMI_RANK"]
-os.environ["RANK"] = RANK
+xpu = False
 
-# PMI_SIZE set by mpirun
-WORLD_SIZE = os.environ["PMI_SIZE"]
-assert WORLD_SIZE == "2"
-os.environ["WORLD_SIZE"] = WORLD_SIZE
+if xpu:
+    # PMI_SIZE set by mpirun
+    WORLD_SIZE = int(os.environ["PMI_SIZE"])
+    os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
 
-os.environ["MASTER_ADDR"] = "0.0.0.0"
-os.environ["MASTER_PORT"] = "29876"
-USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
+    # PMI_RANK set by mpirun
+    RANK = os.environ["PMI_RANK"]
+    os.environ["RANK"] = RANK
 
+    # MPI_LOCALRANKID provenance unknown
+    LOCAL_RANK = int(os.environ["MPI_LOCALRANKID"])
 
-class Model(nn.Module):
-    def __init__(self):
-        super(Model, self).__init__()
-        self.l1 = nn.Linear(5000, 5000)
-        self.l2 = nn.Linear(5000, 5000)
-        self.l3 = nn.Linear(5000, 5000)
-
-    def forward(self, input):
-        return self.l3(self.l2(self.l1(input)))
-
+    os.environ["MASTER_ADDR"] = "0.0.0.0"
+    os.environ["MASTER_PORT"] = "29876"
+    USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
+    comms_backend = "gloo"
+    device_type = "xpu"
+else:
+    WORLD_SIZE = int(os.environ['WORLD_SIZE'])
+    RANK = int(os.environ["RANK"])
+    LOCAL_RANK = int(os.environ["LOCAL_RANK"])
+    comms_backend = "nccl"
+    device_type = "cuda"
 
 def main():
     print("Initialising process group with backend", "ccl", flush=True)
     start_time_total = time.time()
 
-    world_size = os.environ["WORLD_SIZE"]
-    rank = os.environ["RANK"]
-
     # ToDo Run 2 or more processes.
     init_process_group(
-        world_size=int(world_size),
-        rank=int(rank),
-        backend="gloo",
+        world_size=int(WORLD_SIZE),
+        rank=int(RANK),
+        backend=comms_backend,
     )
 
-    device = f"xpu:{RANK}"
+    device = f"{device_type}:{LOCAL_RANK}"
     print(f"Using {device=}")
 
     print("loading model...")
@@ -65,6 +63,8 @@ def main():
         autocast=True,  # Use AMP.
     )
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    if not xpu:
+        torch.cuda.set_device(LOCAL_RANK)
 
     download_path = Path("../../era5/era_v_inf")
 
@@ -76,7 +76,12 @@ def main():
 
     print("preparing model...")
     model.configure_activation_checkpointing()
-    model = DDP(model).to(device)
+    model = FSDP(
+        model,
+        device_id=LOCAL_RANK,
+        use_orig_params=True,
+        sharding_strategy=ShardingStrategy.NO_SHARD
+    )
     model.train()
 
     # AdamW, as used in the paper.
@@ -89,34 +94,36 @@ def main():
             surface_filepath=Path("2023-01-01-surface-level.nc"),
             atmos_filepath=Path("2023-01-01-atmospheric.nc"),
         )
-    sampler = DistributedSampler(dataset) if False else None
+    #sampler = DistributedSampler(dataset) if False else None
     data_loader = DataLoader(
         dataset=dataset,
-        batch_size=1,  # We only have one batch.
+        batch_size=None,  # If we set a batch size we'll need a collate_fn
         shuffle=False,  # We don't need to shuffle.
-        sampler=sampler,
+        #sampler=sampler,
+        #collate_fn=collate_fn,
     )
 
     times = []
 
     time_start = time.time()
-    for epoch, (X, y) in enumerate(data_loader):
-        print(f"epoch {epoch}...")
+    for batch, (X, y) in enumerate(data_loader):
+        print(f"batch {batch}...")
 
-        # Not really necessary, for one forward pass.
         optimizer.zero_grad()
 
-        print("performing forward pass...")
-        pred = model(X)
+        with torch.autocast(device_type=device_type):
+            print("performing forward pass...")
+            pred = model.forward(X)
 
-        # space constraints
-        # pred = pred.to("cpu")
+            # only one of these is necessary
+            pred = pred.to(device)
+            y = y.to(device)
 
-        # mean absolute error of one variable
-        print("calculating loss...")
+            # mean absolute error of one variable
+            print("calculating loss...")
 
-        # Todo: Are pred's of type PyTree and does it matter?
-        loss = mae(pred, y)
+            # Todo: Are pred's of type PyTree and does it matter?
+            loss = mae(pred, y)
 
         print("performing backward pass...")
         loss.backward()
@@ -135,6 +142,7 @@ def main():
     end_time_total = time.time()
     print(f"Total time: {end_time_total - start_time_total}")
 
+    destroy_process_group()
     print("done")
 
 
