@@ -25,19 +25,30 @@ class AuroraDataset(Dataset):
     """
     def __init__(
             self,
-            data_path: Path,
+            data_path: str | Path,
             t: int,
-            static_filepath = Path("static.nc"),
-            surface_filepath = Path("2023-01-01-surface-level.nc"),
-            atmos_filepath = Path("2023-01-01-atmospheric.nc"),
+            static_filepath: str | Path = Path("static.nc"),
+            surface_filepath: str | Path = Path("2023-01-01-surface-level.nc"),
+            atmos_filepath: str | Path = Path("2023-01-01-atmospheric.nc"),
             ):
         self.t = t
+
+        # Convert string paths to Path objects if necessary
+        if isinstance(data_path, str):
+            data_path = Path(data_path)
+        if isinstance(static_filepath, str):
+            static_filepath = Path(static_filepath)
+        if isinstance(surface_filepath, str):
+            surface_filepath = Path(surface_filepath)
+        if isinstance(atmos_filepath, str):
+            atmos_filepath = Path(atmos_filepath)
+        
         self.static_vars_ds = xr.open_dataset(data_path / static_filepath, engine="netcdf4")
         self.surf_vars_ds = xr.open_dataset(data_path / surface_filepath, engine="netcdf4")
         self.atmos_vars_ds = xr.open_dataset(data_path / atmos_filepath, engine="netcdf4")
         self.length = len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1
 
-    def _get_batch(self, index, timerange):
+    def _get_batch(self, timerange):
         """Returns a batch covering a time range.
 
         Args:
@@ -69,9 +80,12 @@ class AuroraDataset(Dataset):
                 lat=torch.from_numpy(self.surf_vars_ds.latitude.values),
                 lon=torch.from_numpy(self.surf_vars_ds.longitude.values),
                 # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-                # `datetime.datetime`s. Note that this needs to be a tuple of length one:
+                # `datetime.datetime`s. 
+                # https://microsoft.github.io/aurora/batch.html#batch-metadata 
+                # Note that this needs to be a tuple of length one:
                 # one value for every batch element.
-                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[index],),
+
+                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[timerange[-1]],),
                 atmos_levels=tuple(int(level) for level in self.atmos_vars_ds.pressure_level.values),
             ),
         )
@@ -83,10 +97,10 @@ class AuroraDataset(Dataset):
             index (int): the index of the batch to retreive.
         """
         timerange = [t + index for t in range(self.t + 1)]
-        input = self._get_batch(index, timerange)
+        input = self._get_batch(timerange)
         # In case the `t` dimentions is needed for comparison with the output of the model
         #target = self._get_batch(index, [self.t + 1])
-        target = self._get_batch(index, self.t + 1)
+        target = self._get_batch([timerange[-1] + 1])
         return input, target
 
     def __len__(self):

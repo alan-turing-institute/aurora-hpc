@@ -3,6 +3,7 @@
 print("importing...")
 import os
 from pathlib import Path
+import time
 
 import torch
 import torch.nn as nn
@@ -43,6 +44,7 @@ class Model(nn.Module):
 
 def main():
     print("Initialising process group with backend", "ccl", flush=True)
+    start_time_total = time.time()
 
     world_size = os.environ["WORLD_SIZE"]
     rank = os.environ["RANK"]
@@ -95,6 +97,9 @@ def main():
         sampler=sampler,
     )
 
+    times = []
+
+    time_start = time.time()
     for epoch, (X, y) in enumerate(data_loader):
         print(f"epoch {epoch}...")
 
@@ -118,6 +123,17 @@ def main():
 
         print("optimizing...")
         optimizer.step()
+
+        time_end = time.time()
+        times.append(time_end - time_start)
+        time_start = time.time()
+
+    avg_time = sum(times[1:]) / len(times[1:])
+    print(f"Average time per epoch (ignoring first): {avg_time}")
+    print(f"Total time for {len(times)} epochs: {sum(times)}")
+
+    end_time_total = time.time()
+    print(f"Total time: {end_time_total - start_time_total}")
 
     print("done")
 
