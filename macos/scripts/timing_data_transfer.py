@@ -2,7 +2,6 @@
 
 print("importing...")
 import argparse
-import os
 import time
 from pathlib import Path
 
@@ -43,6 +42,8 @@ def main(download_path: str, xpu: bool = False):
         sampler=None,
         collate_fn=aurora_collate_fn,
     )
+
+    device = "xpu" if xpu else "cuda" if torch.cuda.is_available() else "cpu"
 
     times = []
 
