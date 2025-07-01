@@ -5,9 +5,9 @@ import argparse
 import time
 from pathlib import Path
 
+import torch
 from dataset import AuroraDataset, aurora_collate_fn
 from torch.utils.data import DataLoader, DistributedSampler
-import torch
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
