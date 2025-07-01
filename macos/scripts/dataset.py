@@ -6,10 +6,13 @@
 
 # https://docs.pytorch.org/tutorials/beginner/basics/data_tutorial.html
 from pathlib import Path
-from torch.utils.data import Dataset
-import xarray as xr
+
 import torch
+import xarray as xr
+from torch.utils.data import Dataset
+
 from aurora import Batch, Metadata
+
 
 class AuroraDataset(Dataset):
     """Aurora dataset.
@@ -23,14 +26,15 @@ class AuroraDataset(Dataset):
         surface_filepath (Path): file containing the surface-level variable data, relative to `data_path`.
         atmos_filepath (Path): file containing the atmospheric variable data, relative to `data_path`.
     """
+
     def __init__(
-            self,
-            data_path: str | Path,
-            t: int,
-            static_filepath: str | Path = Path("static.nc"),
-            surface_filepath: str | Path = Path("2023-01-01-surface-level.nc"),
-            atmos_filepath: str | Path = Path("2023-01-01-atmospheric.nc"),
-            ):
+        self,
+        data_path: str | Path,
+        t: int,
+        static_filepath: str | Path = Path("static.nc"),
+        surface_filepath: str | Path = Path("2023-01-01-surface-level.nc"),
+        atmos_filepath: str | Path = Path("2023-01-01-atmospheric.nc"),
+    ):
         self.t = t
 
         # Convert string paths to Path objects if necessary
@@ -42,11 +46,19 @@ class AuroraDataset(Dataset):
             surface_filepath = Path(surface_filepath)
         if isinstance(atmos_filepath, str):
             atmos_filepath = Path(atmos_filepath)
-        
-        self.static_vars_ds = xr.open_dataset(data_path / static_filepath, engine="netcdf4")
-        self.surf_vars_ds = xr.open_dataset(data_path / surface_filepath, engine="netcdf4")
-        self.atmos_vars_ds = xr.open_dataset(data_path / atmos_filepath, engine="netcdf4")
-        self.length = len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1
+
+        self.static_vars_ds = xr.open_dataset(
+            data_path / static_filepath, engine="netcdf4"
+        )
+        self.surf_vars_ds = xr.open_dataset(
+            data_path / surface_filepath, engine="netcdf4"
+        )
+        self.atmos_vars_ds = xr.open_dataset(
+            data_path / atmos_filepath, engine="netcdf4"
+        )
+        self.length = (
+            len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1
+        )
 
     def _get_batch(self, timerange):
         """Returns a batch covering a time range.
@@ -58,10 +70,18 @@ class AuroraDataset(Dataset):
             surf_vars={
                 # First select time points `index` and `index - 1`. Afterwards, `[None]` inserts a
                 # batch dimension of size one.
-                "2t": torch.from_numpy(self.surf_vars_ds["t2m"].values[timerange][None]),
-                "10u": torch.from_numpy(self.surf_vars_ds["u10"].values[timerange][None]),
-                "10v": torch.from_numpy(self.surf_vars_ds["v10"].values[timerange][None]),
-                "msl": torch.from_numpy(self.surf_vars_ds["msl"].values[timerange][None]),
+                "2t": torch.from_numpy(
+                    self.surf_vars_ds["t2m"].values[timerange][None]
+                ),
+                "10u": torch.from_numpy(
+                    self.surf_vars_ds["u10"].values[timerange][None]
+                ),
+                "10v": torch.from_numpy(
+                    self.surf_vars_ds["v10"].values[timerange][None]
+                ),
+                "msl": torch.from_numpy(
+                    self.surf_vars_ds["msl"].values[timerange][None]
+                ),
             },
             static_vars={
                 # The static variables are constant, so we just get them for the first time.
@@ -80,13 +100,18 @@ class AuroraDataset(Dataset):
                 lat=torch.from_numpy(self.surf_vars_ds.latitude.values),
                 lon=torch.from_numpy(self.surf_vars_ds.longitude.values),
                 # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-                # `datetime.datetime`s. 
-                # https://microsoft.github.io/aurora/batch.html#batch-metadata 
+                # `datetime.datetime`s.
+                # https://microsoft.github.io/aurora/batch.html#batch-metadata
                 # Note that this needs to be a tuple of length one:
                 # one value for every batch element.
-
-                time=(self.surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[timerange[-1]],),
-                atmos_levels=tuple(int(level) for level in self.atmos_vars_ds.pressure_level.values),
+                time=(
+                    self.surf_vars_ds.valid_time.values.astype(
+                        "datetime64[s]"
+                    ).tolist()[timerange[-1]],
+                ),
+                atmos_levels=tuple(
+                    int(level) for level in self.atmos_vars_ds.pressure_level.values
+                ),
             ),
         )
 
@@ -99,13 +124,12 @@ class AuroraDataset(Dataset):
         timerange = [t + index for t in range(self.t + 1)]
         input = self._get_batch(timerange)
         # In case the `t` dimentions is needed for comparison with the output of the model
-        #target = self._get_batch(index, [self.t + 1])
+        # target = self._get_batch(index, [self.t + 1])
         target = self._get_batch([timerange[-1] + 1])
         return input, target
 
     def __len__(self):
-        """Returns the total number of batches available.
-        """
+        """Returns the total number of batches available."""
         return self.length
 
 
@@ -125,7 +149,7 @@ def batch_collate_fn(batches):
         batches[0].surf_vars,
         batches[0].static_vars,
         batches[0].atmos_vars,
-        batches[0].metadata
+        batches[0].metadata,
     )
     # Append the other batches to it
 
@@ -134,7 +158,9 @@ def batch_collate_fn(batches):
     # Merge the tensors along the batch dimension
     for key in keys:
         for idx in range(1, len(batches)):
-            result.surf_vars[key] = torch.cat([result.surf_vars[key], batches[idx].surf_vars[key]], 0)
+            result.surf_vars[key] = torch.cat(
+                [result.surf_vars[key], batches[idx].surf_vars[key]], 0
+            )
 
     # Static variables remain constant
     result.static_vars = batches[0].static_vars
@@ -144,7 +170,9 @@ def batch_collate_fn(batches):
     # Merge the tensors along the batch dimension
     for key in keys:
         for idx in range(1, len(batches)):
-            result.atmos_vars[key] = torch.cat([result.atmos_vars[key], batches[idx].atmos_vars[key]], 0)
+            result.atmos_vars[key] = torch.cat(
+                [result.atmos_vars[key], batches[idx].atmos_vars[key]], 0
+            )
 
     # Metadata
     result.metadata.time = [t for item in batches for t in item.metadata.time]
@@ -175,5 +203,5 @@ def aurora_collate_fn(data):
 
     # Input type is [(Batch, Batch),...] where the list contains batch_size elements
     # Return type is (Batch, Batch)
-    X, y  = zip(*data)
+    X, y = zip(*data)
     return (batch_collate_fn(X), batch_collate_fn(y))

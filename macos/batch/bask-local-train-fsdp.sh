@@ -49,5 +49,3 @@ deactivate
 popd
 
 echo "## Aurora fine-tuning script completed"
-
-

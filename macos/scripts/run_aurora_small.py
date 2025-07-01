@@ -2,20 +2,21 @@
 
 print("importing...")
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 from aurora_loss import mae
-from torch.distributed import init_process_group, destroy_process_group
+from dataset import AuroraDataset, aurora_collate_fn
+from torch.distributed import destroy_process_group, init_process_group
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import AuroraSmall
-from dataset import AuroraDataset, aurora_collate_fn
 
 os.environ["MASTER_ADDR"] = "0.0.0.0"
 os.environ["MASTER_PORT"] = "29876"
+
 
 def main():
     start_time_total = time.time()
@@ -41,18 +42,17 @@ def main():
     model.configure_activation_checkpointing()
     model.train()
 
-
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
 
     dataset = AuroraDataset(
-            data_path=download_path,
-            t=1,
-            static_filepath=Path("static.nc"),
-            surface_filepath=Path("2023-01-surface-level.nc"),
-            atmos_filepath=Path("2023-01-atmospheric.nc"),
-        )
-    
+        data_path=download_path,
+        t=1,
+        static_filepath=Path("static.nc"),
+        surface_filepath=Path("2023-01-surface-level.nc"),
+        atmos_filepath=Path("2023-01-atmospheric.nc"),
+    )
+
     sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
         dataset=dataset,
@@ -65,7 +65,7 @@ def main():
     times = []
 
     time_start = time.time()
-    for epoch, (X, y) in enumerate(data_loader): # Only run 3 epochs for testing.
+    for epoch, (X, y) in enumerate(data_loader):  # Only run 3 epochs for testing.
         print(f"epoch {epoch}...")
 
         # Not really necessary, for one forward pass.
