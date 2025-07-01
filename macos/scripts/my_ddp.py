@@ -113,7 +113,7 @@ def main():
 
         with torch.autocast(device_type=device_type):
             print("performing forward pass...")
-            pred = model.forward(X)
+            pred = model(X)
 
             # only one of these is necessary
             pred = pred.to(device)
