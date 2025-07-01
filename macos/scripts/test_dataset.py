@@ -1,12 +1,16 @@
 import unittest
 import itertools
 import datetime
-from dataset import AuroraDataset
+from dataset import AuroraDataset, aurora_collate_fn
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import xarray as xr
 import numpy as np
+from aurora import Batch
+
+from torch.utils.data import DataLoader
+
 
 def make_dummy_static(temp_directory: Path) -> str:
     """Make a dummy static dataset and return the file name."""
@@ -92,8 +96,6 @@ def make_dummy_atmos(temp_directory: Path) -> str:
     file_name = "test-atmos.nc"
     dataset.to_netcdf(temp_directory / file_name, engine="netcdf4")
     return file_name
-
-
 class TestDataset(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -144,7 +146,61 @@ class TestDataset(unittest.TestCase):
                 self.assertEqual(
                     y.surf_vars[var_name].shape, (1, 2, 2)  
                 )
+
+class TestAuroraCollateFn(unittest.TestCase):
+    def test_collate_fn(self):
+        dataset = AuroraDataset(
+            data_path=Path("../era5/test"),
+            t=1,
+            static_filepath=Path("small-static.nc"),
+            surface_filepath=Path("small-surface-level.nc"),
+            atmos_filepath=Path("small-atmospheric.nc"),
+        )
+        X, y = dataset[0]
         
+        # test with single item
+        batch = aurora_collate_fn([(X, y)])
+        self.assertIsInstance(batch, tuple)
+        self.assertEqual(len(batch), 2)
+        [self.assertIsInstance(b, Batch) for b in batch]
+        for var_name in ["2t", "10u", "10v", "msl"]:
+            self.assertEqual(
+                batch[0].surf_vars[var_name].shape[0], 1  # batch size 
+            )
+
+        # test with multiple items
+        batch = aurora_collate_fn([(X, y), (X, y)])
+        self.assertIsInstance(batch, tuple)
+        self.assertEqual(len(batch), 2)
+        [self.assertIsInstance(b, Batch) for b in batch]
+        for var_name in ["2t", "10u", "10v", "msl"]:
+            self.assertEqual(
+                batch[0].surf_vars[var_name].shape[0], 2  # batch size 
+            )
+
+    def test_collate_fn_with_dataloader(self):
+        dataset = AuroraDataset(
+            data_path=Path("../era5/test"),
+            t=1,
+            static_filepath=Path("small-static.nc"),
+            surface_filepath=Path("small-surface-level.nc"),
+            atmos_filepath=Path("small-atmospheric.nc"),
+        )
+        data_loader = DataLoader(
+            dataset=dataset,
+            batch_size=2,
+            collate_fn=aurora_collate_fn,
+        )
+        
+        for batch in data_loader:
+            self.assertIsInstance(batch, tuple)
+            self.assertEqual(len(batch), 2)
+            [self.assertIsInstance(b, Batch) for b in batch]
+            for var_name in ["2t", "10u", "10v", "msl"]:
+                self.assertEqual(
+                    batch[0].surf_vars[var_name].shape[0], 2 # batch size
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
