@@ -20,8 +20,8 @@ def make_dummy_static(temp_directory: Path) -> str:
     now = datetime.datetime.now()
     coords = {
         'valid_time': np.arange(now, now + datetime.timedelta(seconds=dims['valid_time']), dtype="datetime64[s]"),
-        'latitude': np.linspace(-90, 90, dims['latitude'], dtype=np.float64),
-        'longitude': np.linspace(-180, 180, dims['longitude'], dtype=np.float64),
+        'latitude': np.linspace(90, -90, dims['latitude'], dtype=np.float64, endpoint=False),
+        'longitude': np.linspace(0, 360, dims['longitude'], dtype=np.float64, endpoint=False),
     }
 
     # Make dummy data (e.g., all zeros)
@@ -48,8 +48,8 @@ def make_dummy_surface(temp_directory: Path) -> str:
     now = datetime.datetime.now()
     coords = {
         'valid_time': np.arange(now, now + datetime.timedelta(seconds=dims['valid_time']), dtype="datetime64[s]"),
-        'latitude': np.linspace(-90, 90, dims['latitude'], dtype=np.float64),
-        'longitude': np.linspace(-180, 180, dims['longitude'], dtype=np.float64),
+        'latitude': np.linspace(90, -90, dims['latitude'], dtype=np.float64, endpoint=False),
+        'longitude': np.linspace(0, 360, dims['longitude'], dtype=np.float64, endpoint=False),
     }
 
     # Make dummy data (e.g., all zeros)
@@ -77,8 +77,8 @@ def make_dummy_atmos(temp_directory: Path) -> str:
     coords = {
         'valid_time': np.arange(now, now + datetime.timedelta(seconds=dims['valid_time']), dtype="datetime64[s]"),
         'pressure_level': np.linspace(0, 999, dims['pressure_level'], dtype=np.float64),
-        'latitude': np.linspace(-90, 90, dims['latitude'], dtype=np.float64),
-        'longitude': np.linspace(-180, 180, dims['longitude'], dtype=np.float64),
+        'latitude': np.linspace(90, -90, dims['latitude'], dtype=np.float64, endpoint=False),
+        'longitude': np.linspace(0, 360, dims['longitude'], dtype=np.float64, endpoint=False),
     }
 
     # Make dummy data (e.g., all zeros)
@@ -119,11 +119,11 @@ class TestDataset(unittest.TestCase):
         self.assertEqual(len(dataset), 30)
 
         dataset = AuroraDataset(
-            data_path=Path("../era5/test"),
+            data_path=Path(self.temp_dir.name),
             t=0,
-            static_filepath=Path("small-static.nc"),
-            surface_filepath=Path("small-surface-level.nc"),
-            atmos_filepath=Path("small-atmospheric.nc"),
+            static_filepath=self.dummy_static,
+            surface_filepath=self.dummy_surface,
+            atmos_filepath=self.dummy_atmos,
         )
         self.assertEqual(len(dataset), 31)
 
@@ -131,11 +131,11 @@ class TestDataset(unittest.TestCase):
         for (in_t, out_t), var_name in itertools.product([(1, 2), (2, 3)], ["2t", "10u", "10v", "msl"]):
             with self.subTest(in_t=in_t, out_t=out_t, var_name=var_name):
                 dataset = AuroraDataset(
-                    data_path=Path("../era5/test"),
+                    data_path=Path(self.temp_dir.name),
                     t=in_t,
-                    static_filepath=Path("small-static.nc"),
-                    surface_filepath=Path("small-surface-level.nc"),
-                    atmos_filepath=Path("small-atmospheric.nc"),
+                    static_filepath=self.dummy_static,
+                    surface_filepath=self.dummy_surface,
+                    atmos_filepath=self.dummy_atmos,
                 )
                 X, y = dataset[0]
                 self.assertEqual(
@@ -144,17 +144,27 @@ class TestDataset(unittest.TestCase):
 
                 )
                 self.assertEqual(
-                    y.surf_vars[var_name].shape, (1, 2, 2)  
+                    y.surf_vars[var_name].shape, (1, 1, 2, 2)  
                 )
 
 class TestAuroraCollateFn(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        """Set up the test class."""
+        # Should be deleted when the variable goes out of scope.
+        cls.temp_dir = TemporaryDirectory()
+        print(f"Temporary directory created at {cls.temp_dir.name}")
+        cls.dummy_static = make_dummy_static(Path(cls.temp_dir.name))
+        cls.dummy_surface = make_dummy_surface(Path(cls.temp_dir.name))
+        cls.dummy_atmos = make_dummy_atmos(Path(cls.temp_dir.name))
+
     def test_collate_fn(self):
         dataset = AuroraDataset(
-            data_path=Path("../era5/test"),
+            data_path=Path(self.temp_dir.name),
             t=1,
-            static_filepath=Path("small-static.nc"),
-            surface_filepath=Path("small-surface-level.nc"),
-            atmos_filepath=Path("small-atmospheric.nc"),
+            static_filepath=self.dummy_static,
+            surface_filepath=self.dummy_surface,
+            atmos_filepath=self.dummy_atmos,
         )
         X, y = dataset[0]
         
@@ -180,11 +190,11 @@ class TestAuroraCollateFn(unittest.TestCase):
 
     def test_collate_fn_with_dataloader(self):
         dataset = AuroraDataset(
-            data_path=Path("../era5/test"),
+            data_path=Path(self.temp_dir.name),
             t=1,
-            static_filepath=Path("small-static.nc"),
-            surface_filepath=Path("small-surface-level.nc"),
-            atmos_filepath=Path("small-atmospheric.nc"),
+            static_filepath=self.dummy_static,
+            surface_filepath=self.dummy_surface,
+            atmos_filepath=self.dummy_atmos,
         )
         data_loader = DataLoader(
             dataset=dataset,
