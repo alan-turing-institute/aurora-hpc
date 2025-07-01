@@ -52,7 +52,7 @@ class AuroraDataset(Dataset):
         """Returns a batch covering a time range.
 
         Args:
-            timerange (int): the range of values over time to return in the batch.
+            timerange (list): the range of values over time to return in the batch.
         """
         return Batch(
             surf_vars={
