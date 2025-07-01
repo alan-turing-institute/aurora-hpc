@@ -1,25 +1,39 @@
 """Fine tune Aurora weather model."""
 
 print("importing...")
+import argparse
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
 import torch
 import torch.nn as nn
 from aurora_loss import mae
-from torch.distributed import init_process_group, destroy_process_group
-from torch.utils.data import DistributedSampler
+from dataset import AuroraDataset, aurora_collate_fn
+from torch.distributed import destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
-from dataset import AuroraDataset, aurora_collate_fn
 
-xpu = False
+parser = argparse.ArgumentParser()
+parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
+parser.add_argument(
+    "--download_path",
+    "-d",
+    help="path to download directory",
+    default="../../era5/era_v_inf",
+)
+args = parser.parse_args()
 
-if xpu:
+if args.xpu:
+    import intel_extension_for_pytorch as ipex
+    import oneccl_bindings_for_pytorch  # has side-effects
+
+    # unset affinity mask
+    os.environ.pop("ZE_AFFINITY_MASK", None)
+
     # PMI_SIZE set by mpirun
     WORLD_SIZE = int(os.environ["PMI_SIZE"])
     os.environ["WORLD_SIZE"] = str(WORLD_SIZE)
@@ -34,19 +48,24 @@ if xpu:
     os.environ["MASTER_ADDR"] = "0.0.0.0"
     os.environ["MASTER_PORT"] = "29876"
     USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
-    comms_backend = "gloo"
-    device_type = "xpu"
+
 else:
-    WORLD_SIZE = int(os.environ['WORLD_SIZE'])
+    WORLD_SIZE = int(os.environ["WORLD_SIZE"])
     RANK = int(os.environ["RANK"])
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
-    comms_backend = "nccl"
-    device_type = "cuda"
 
-def main():
-    print("Initialising process group with backend", "ccl", flush=True)
+
+def main(download_path: str, xpu: bool = False):
+    if xpu:
+        comms_backend = "ccl"
+        device_type = "xpu"
+    else:
+        comms_backend = "nccl"
+        device_type = "cuda"
+
     start_time_total = time.time()
 
+    print("Initialising process group with backend", comms_backend, flush=True)
     # ToDo Run 2 or more processes.
     init_process_group(
         world_size=int(WORLD_SIZE),
@@ -66,7 +85,7 @@ def main():
     if not xpu:
         torch.cuda.set_device(LOCAL_RANK)
 
-    download_path = Path("../../era5/era_v_inf")
+    download_path = Path(download_path)
 
     print("loading data...")
 
@@ -80,7 +99,7 @@ def main():
         model,
         device_id=LOCAL_RANK,
         use_orig_params=True,
-        sharding_strategy=ShardingStrategy.NO_SHARD
+        sharding_strategy=ShardingStrategy.NO_SHARD,
     )
     model.train()
 
@@ -88,12 +107,12 @@ def main():
     optimizer = torch.optim.AdamW(model.parameters())
 
     dataset = AuroraDataset(
-            data_path=download_path,
-            t=1,
-            static_filepath=Path("static.nc"),
-            surface_filepath=Path("2023-01-01-surface-level.nc"),
-            atmos_filepath=Path("2023-01-01-atmospheric.nc"),
-        )
+        data_path=download_path,
+        t=1,
+        static_filepath=Path("static.nc"),
+        surface_filepath=Path("2023-01-surface-level.nc"),
+        atmos_filepath=Path("2023-01-atmospheric.nc"),
+    )
     sampler = DistributedSampler(dataset) if False else None
     data_loader = DataLoader(
         dataset=dataset,
@@ -146,4 +165,4 @@ def main():
     print("done")
 
 
-main()
+main(args.download_path, xpu=args.xpu)
