@@ -52,7 +52,7 @@ class AuroraDataset(Dataset):
         """Returns a batch covering a time range.
 
         Args:
-            timerange (int): the range of values over time to return in the batch.
+            timerange (list): the range of values over time to return in the batch.
         """
         return Batch(
             surf_vars={
@@ -107,3 +107,73 @@ class AuroraDataset(Dataset):
         """Returns the total number of batches available.
         """
         return self.length
+
+
+def batch_collate_fn(batches):
+    """Collate a list of batches into a single batch.
+
+    Args:
+        batches ([Batch, Batch,...]): A list of batches to collate into a single
+            batch.
+
+    Returns:
+        batch (Batch): A single batch containing all of the data.
+    """
+
+    # Start with the first batch
+    result = Batch(
+        batches[0].surf_vars,
+        batches[0].static_vars,
+        batches[0].atmos_vars,
+        batches[0].metadata
+    )
+    # Append the other batches to it
+
+    # Surface variables
+    keys = result.surf_vars.keys()
+    # Merge the tensors along the batch dimension
+    for key in keys:
+        for idx in range(1, len(batches)):
+            result.surf_vars[key] = torch.cat([result.surf_vars[key], batches[idx].surf_vars[key]], 0)
+
+    # Static variables remain constant
+    result.static_vars = batches[0].static_vars
+
+    # Atmospheric variables
+    keys = result.atmos_vars.keys()
+    # Merge the tensors along the batch dimension
+    for key in keys:
+        for idx in range(1, len(batches)):
+            result.atmos_vars[key] = torch.cat([result.atmos_vars[key], batches[idx].atmos_vars[key]], 0)
+
+    # Metadata
+    result.metadata.time = [t for item in batches for t in item.metadata.time]
+
+    return result
+
+
+def aurora_collate_fn(data):
+    """Collate a list of (input, output) batch pairs into a single batch pair.
+
+    Provides a collate_fn for batch collation during training. See:
+    https://docs.pytorch.org/docs/stable/data.html#working-with-collate-fn
+
+    Apparently this only works with a batch size of 1, which undermines its
+    value to a large extent. This may be a limitation of the Aurora model, or
+    it could be that this has been implemented incrrecoty; I'm not certain at
+    present.
+
+    Setting a batch size of None will prevent this function from being used.
+
+    Args:
+        batch ([(Batch, Batch),...]): A list of (input, output) batch pairs to
+            collate into a single batch pair
+    Returns:
+        batch ((Batch, Batch)): A single (input, output) batch pair
+            containing all of the data.
+    """
+
+    # Input type is [(Batch, Batch),...] where the list contains batch_size elements
+    # Return type is (Batch, Batch)
+    X, y  = zip(*data)
+    return (batch_collate_fn(X), batch_collate_fn(y))

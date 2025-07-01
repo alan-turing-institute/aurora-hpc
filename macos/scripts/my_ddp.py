@@ -15,7 +15,7 @@ from torch.distributed.fsdp import ShardingStrategy
 from torch.utils.data import DataLoader
 
 from aurora import Aurora
-from dataset import AuroraDataset
+from dataset import AuroraDataset, aurora_collate_fn
 
 xpu = False
 
@@ -94,13 +94,13 @@ def main():
             surface_filepath=Path("2023-01-01-surface-level.nc"),
             atmos_filepath=Path("2023-01-01-atmospheric.nc"),
         )
-    #sampler = DistributedSampler(dataset) if False else None
+    sampler = DistributedSampler(dataset) if False else None
     data_loader = DataLoader(
         dataset=dataset,
-        batch_size=None,  # If we set a batch size we'll need a collate_fn
+        batch_size=1,  # If we set a batch size we'll need a collate_fn
         shuffle=False,  # We don't need to shuffle.
-        #sampler=sampler,
-        #collate_fn=collate_fn,
+        sampler=sampler,
+        collate_fn=aurora_collate_fn,
     )
 
     times = []
