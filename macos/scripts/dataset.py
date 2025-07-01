@@ -109,11 +109,11 @@ class AuroraDataset(Dataset):
         return self.length
 
 
-def batch_collate_fn(batch):
+def batch_collate_fn(batches):
     """Collate a list of batches into a single batch.
 
     Args:
-        batch ([Batch, Batch,...]): A list of batches to collate into a single
+        batches ([Batch, Batch,...]): A list of batches to collate into a single
             batch.
 
     Returns:
@@ -122,10 +122,10 @@ def batch_collate_fn(batch):
 
     # Start with the first batch
     result = Batch(
-        batch[0].surf_vars,
-        batch[0].static_vars,
-        batch[0].atmos_vars,
-        batch[0].metadata
+        batches[0].surf_vars,
+        batches[0].static_vars,
+        batches[0].atmos_vars,
+        batches[0].metadata
     )
     # Append the other batches to it
 
@@ -133,21 +133,21 @@ def batch_collate_fn(batch):
     keys = result.surf_vars.keys()
     # Merge the tensors along the batch dimension
     for key in keys:
-        for idx in range(1, len(batch)):
-            result.surf_vars[key] = torch.cat([result.surf_vars[key], batch[idx].surf_vars[key]], 0)
+        for idx in range(1, len(batches)):
+            result.surf_vars[key] = torch.cat([result.surf_vars[key], batches[idx].surf_vars[key]], 0)
 
     # Static variables remain constant
-    result.static_vars = batch[0].static_vars
+    result.static_vars = batches[0].static_vars
 
     # Atmospheric variables
     keys = result.atmos_vars.keys()
     # Merge the tensors along the batch dimension
     for key in keys:
-        for idx in range(1, len(batch)):
-            result.atmos_vars[key] = torch.cat([result.atmos_vars[key], batch[idx].atmos_vars[key]], 0)
+        for idx in range(1, len(batches)):
+            result.atmos_vars[key] = torch.cat([result.atmos_vars[key], batches[idx].atmos_vars[key]], 0)
 
     # Metadata
-    result.metadata.time = [t for item in batch for t in item.metadata.time]
+    result.metadata.time = [t for item in batches for t in item.metadata.time]
 
     return result
 
