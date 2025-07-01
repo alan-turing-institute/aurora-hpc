@@ -113,7 +113,7 @@ def main(download_path: str, xpu: bool = False):
         surface_filepath=Path("2023-01-surface-level.nc"),
         atmos_filepath=Path("2023-01-atmospheric.nc"),
     )
-    sampler = DistributedSampler(dataset) if False else None
+    sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
