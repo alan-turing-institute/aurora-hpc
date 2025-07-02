@@ -29,7 +29,7 @@ def main(download_path: str, xpu: bool = False):
     download_path = Path(download_path)
 
     print("loading data...")
-    time_start_load_xarray = time.time()
+    time_start_init_dataset = time.time()
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
@@ -37,9 +37,9 @@ def main(download_path: str, xpu: bool = False):
         surface_filepath=Path("2023-01-surface-level.nc"),
         atmos_filepath=Path("2023-01-atmospheric.nc"),
     )
-    time_end_load_xarray = time.time()
+    time_end_init_dataset = time.time()
     print(
-        f"Time to init AuroraDataset: {time_end_load_xarray - time_start_load_xarray}"
+        f"Time to init AuroraDataset (loading metadata): {time_end_init_dataset - time_start_init_dataset}"
     )
 
     data_loader = DataLoader(
@@ -52,24 +52,34 @@ def main(download_path: str, xpu: bool = False):
 
     device = "xpu" if xpu else "cuda" if torch.cuda.is_available() else "cpu"
 
-    times = []
+    times_ram = []
+    time_gpu = []
 
-    time_start = time.time()
-    for batch, (X, y) in enumerate(data_loader):
+    time_start_ram = time.time()
+    for batch, data in enumerate(data_loader):
         print(f"batch {batch}...")
+        X, y = data
+        time_end_ram = time.time()
+        times_ram.append(time_end_ram - time_start_ram)
 
         print("moving batch (input and target) to device")
+        time_start_gpu = time.time()
         X.to(device)
         y.to(device)
+        time_end_gpu = time.time()
+        time_gpu.append(time_end_gpu - time_start_gpu)
 
-        time_end = time.time()
-        times.append(time_end - time_start)
-        time_start = time.time()
+        time_start_ram = time.time()
 
-    avg_time = sum(times[1:]) / len(times[1:])
-    print(f"Time for first epoch: {times[0]}")
-    print(f"Average time per epoch (ignoring first): {avg_time}")
-    print(f"Total time for {len(times)} epochs: {sum(times)}")
+    print(f"Time for first batch (RAM): {times_ram[0]}")
+    avg_time_ram = sum(times_ram[1:]) / len(times_ram[1:])
+    print(f"Average time per batch (RAM, ignoring first): {avg_time_ram}")
+    print(f"Total time for {len(times_ram)} batches (RAM): {sum(times_ram)}")
+
+    print(f"Time for first batch (GPU): {time_gpu[0]}")
+    avg_time_gpu = sum(time_gpu[1:]) / len(time_gpu[1:])
+    print(f"Average time per batch (GPU, ignoring first): {avg_time_gpu}")
+    print(f"Total time for {len(time_gpu)} batches (GPU): {sum(time_gpu)}")
 
     time_end_total = time.time()
     print(f"Total time: {time_end_total - time_start_total}")
