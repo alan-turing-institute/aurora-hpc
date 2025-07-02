@@ -3,6 +3,7 @@
 print("importing...")
 import argparse
 import os
+import re
 import time
 from pathlib import Path
 
@@ -45,7 +46,22 @@ if args.xpu:
     # MPI_LOCALRANKID provenance unknown
     LOCAL_RANK = int(os.environ["MPI_LOCALRANKID"])
 
-    os.environ["MASTER_ADDR"] = "0.0.0.0"
+    # get the master address
+    numbers = re.compile("\d+")
+    nodelist_env = os.getenv("SLURM_JOB_NODELIST")
+
+    # e.g. "pvc-s-[24-25]"
+    try:
+        # If we're running on >1 node, we should set the MASTER_ADDR
+        # to the hostname of rank 0.
+        prefix = nodelist_env[0 : nodelist_env.index("[")]
+        nodelist = tuple(prefix + x for x in numbers.findall(nodelist_env))
+        master_addr = nodelist[0]
+    except ValueError:
+        # We must be running on a single node.
+        master_addr = "0.0.0.0"
+
+    os.environ["MASTER_ADDR"] = master_addr
     os.environ["MASTER_PORT"] = "29876"
     USE_SUBDEVICES = os.environ.get("USE_SUBDEVICES", False)
 
@@ -87,12 +103,6 @@ def main(download_path: str, xpu: bool = False):
 
     download_path = Path(download_path)
 
-    print("loading data...")
-
-    # 1 for RANK 0 and 3 for RANK 1.
-    i = (int(RANK) * 2) + 1
-    print(f"batching with {i=}")
-
     print("preparing model...")
     model.configure_activation_checkpointing()
     model = FSDP(
@@ -106,6 +116,7 @@ def main(download_path: str, xpu: bool = False):
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
 
+    print("loading data...")
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
