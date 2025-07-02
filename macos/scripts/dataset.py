@@ -25,6 +25,7 @@ class AuroraDataset(Dataset):
         static_filepath (Path): file containing the static variable data, relative to `data_path`.
         surface_filepath (Path): file containing the surface-level variable data, relative to `data_path`.
         atmos_filepath (Path): file containing the atmospheric variable data, relative to `data_path`.
+        use_dask (bool): Whether to use dask to load the datasets.
     """
 
     def __init__(
@@ -34,6 +35,7 @@ class AuroraDataset(Dataset):
         static_filepath: str | Path = Path("static.nc"),
         surface_filepath: str | Path = Path("2023-01-01-surface-level.nc"),
         atmos_filepath: str | Path = Path("2023-01-01-atmospheric.nc"),
+        use_dask: bool = False,
     ):
         self.t = t
 
@@ -48,13 +50,19 @@ class AuroraDataset(Dataset):
             atmos_filepath = Path(atmos_filepath)
 
         self.static_vars_ds = xr.open_dataset(
-            data_path / static_filepath, engine="netcdf4"
+            data_path / static_filepath,
+            engine="netcdf4",
+            chunks={} if use_dask else None,
         )
         self.surf_vars_ds = xr.open_dataset(
-            data_path / surface_filepath, engine="netcdf4"
+            data_path / static_filepath,
+            engine="netcdf4",
+            chunks={} if use_dask else None,
         )
         self.atmos_vars_ds = xr.open_dataset(
-            data_path / atmos_filepath, engine="netcdf4"
+            data_path / static_filepath,
+            engine="netcdf4",
+            chunks={} if use_dask else None,
         )
         self.length = (
             len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1

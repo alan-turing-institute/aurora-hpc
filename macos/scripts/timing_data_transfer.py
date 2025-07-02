@@ -16,6 +16,11 @@ parser.add_argument(
     "-d",
     help="path to download directory",
     default="../../era5/era_v_inf",
+    type=Path,
+)
+parser.add_argument("--dask", action="store_true", help="use dask for data loading")
+parser.add_argument(
+    "--num_workers", "-w", help="the number of data loader workers", default=0, type=int
 )
 args = parser.parse_args()
 
@@ -23,12 +28,10 @@ if args.xpu:
     import intel_extension_for_pytorch as ipex
 
 
-def main(download_path: str, xpu: bool = False):
+def main(download_path: Path, use_dask: bool, num_workers: int, xpu: bool):
     time_start_total = time.time()
 
-    download_path = Path(download_path)
-
-    print("loading data...")
+    print("loading data..." + " with dask" if use_dask else "")
     time_start_init_dataset = time.time()
     dataset = AuroraDataset(
         data_path=download_path,
@@ -36,6 +39,7 @@ def main(download_path: str, xpu: bool = False):
         static_filepath=Path("static.nc"),
         surface_filepath=Path("2023-01-surface-level.nc"),
         atmos_filepath=Path("2023-01-atmospheric.nc"),
+        use_dask=use_dask,
     )
     time_end_init_dataset = time.time()
     print(
@@ -55,6 +59,7 @@ def main(download_path: str, xpu: bool = False):
         shuffle=False,  # We don't need to shuffle.
         sampler=None,
         collate_fn=aurora_collate_fn,
+        num_workers=num_workers,
     )
 
     device = "xpu" if xpu else "cuda" if torch.cuda.is_available() else "cpu"
@@ -94,4 +99,4 @@ def main(download_path: str, xpu: bool = False):
     print("done")
 
 
-main(args.download_path, xpu=args.xpu)
+main(args.download_path, args.dask, args.num_workers, args.xpu)
