@@ -11,7 +11,7 @@ import torch
 import torch.nn as nn
 from aurora_loss import mae
 from dataset import AuroraDataset, aurora_collate_fn
-from torch.distributed import destroy_process_group, init_process_group
+from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 from torch.utils.data import DataLoader, DistributedSampler
@@ -165,9 +165,19 @@ def main(download_path: str, xpu: bool = False):
         times.append(time_end - time_start)
         time_start = time.time()
 
-    avg_time = sum(times[1:]) / len(times[1:])
-    print(f"Average time per epoch (ignoring first): {avg_time}")
-    print(f"Total time for {len(times)} epochs: {sum(times)}")
+    times = torch.Tensor(times)
+    gathered_times = [torch.zeros(times.shape) for _ in range(WORLD_SIZE)]
+    all_gather(gathered_times, times)
+    print(f"{gathered_times=}")
+
+    if int(RANK) == 0:
+        avg_time = sum([sum(t[1:]) for t in gathered_times]) / sum(
+            [len(times[1:]) for t in gathered_times]
+        )
+        print(f"Average time per epoch (ignoring first): {avg_time}")
+        total_time = sum([sum(t) for t in gathered_times])
+        total_no_epochs = sum([len(t) for t in gathered_times])
+        print(f"Total time for {total_no_epochs} epochs: {total_time}")
 
     time_end_total = time.time()
     print(f"Total time: {time_end_total - time_start_total}")
