@@ -277,14 +277,14 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
             )
 
             loss_fn = MSELoss()
-            
+
             for k, v in pred.surf_vars.items():
                 loss = loss_fn(v, batch.surf_vars[k][:, :, :720, :]).item()
                 if k not in surf_losses:
                     surf_losses[k] = [loss]
                 else:
                     surf_losses[k].append(loss)
-                    
+
             for k, v in pred.atmos_vars.items():
                 loss = loss_fn(v, batch.atmos_vars[k][:, :, :, :720, :]).item()
                 if k not in atmos_losses:

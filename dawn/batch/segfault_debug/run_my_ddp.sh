@@ -2,7 +2,7 @@
 
 # e.g.
 # module load intel-oneapi-mpi/2021.14.1
-# mpirun -n 2 -prepend-rank ./run_my_ddp.sh 
+# mpirun -n 2 -prepend-rank ./run_my_ddp.sh
 
 module purge
 module load default-dawn
@@ -28,4 +28,3 @@ export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
 
 # Pass all arguments to allgather module.
 python ../../scripts/segfault_debug/my_ddp.py
-
