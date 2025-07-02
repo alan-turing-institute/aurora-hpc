@@ -42,6 +42,13 @@ def main(download_path: str, xpu: bool = False):
         f"Time to init AuroraDataset (loading metadata): {time_end_init_dataset - time_start_init_dataset}"
     )
 
+    time_start_load_dataset = time.time()
+    dataset.static_vars_ds.load()
+    dataset.surf_vars_ds.load()
+    dataset.atmos_vars_ds.load()
+    time_end_load_dataset = time.time()
+    print(f"Time to load datasets: {time_end_load_dataset - time_start_load_dataset}")
+
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
@@ -64,8 +71,8 @@ def main(download_path: str, xpu: bool = False):
 
         print("moving batch (input and target) to device")
         time_start_gpu = time.time()
-        X.to(device)
-        y.to(device)
+        X = X.to(device)
+        y = y.to(device)
         time_end_gpu = time.time()
         time_gpu.append(time_end_gpu - time_start_gpu)
 
