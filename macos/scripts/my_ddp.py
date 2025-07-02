@@ -63,7 +63,7 @@ def main(download_path: str, xpu: bool = False):
         comms_backend = "nccl"
         device_type = "cuda"
 
-    start_time_total = time.time()
+    time_start_total = time.time()
 
     print("Initialising process group with backend", comms_backend, flush=True)
     # ToDo Run 2 or more processes.
@@ -158,8 +158,8 @@ def main(download_path: str, xpu: bool = False):
     print(f"Average time per epoch (ignoring first): {avg_time}")
     print(f"Total time for {len(times)} epochs: {sum(times)}")
 
-    end_time_total = time.time()
-    print(f"Total time: {end_time_total - start_time_total}")
+    time_end_total = time.time()
+    print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
     print("done")
