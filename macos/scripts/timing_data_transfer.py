@@ -29,6 +29,7 @@ def main(download_path: str, xpu: bool = False):
     download_path = Path(download_path)
 
     print("loading data...")
+    time_start_load_xarray = time.time()
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
@@ -36,6 +37,11 @@ def main(download_path: str, xpu: bool = False):
         surface_filepath=Path("2023-01-surface-level.nc"),
         atmos_filepath=Path("2023-01-atmospheric.nc"),
     )
+    time_end_load_xarray = time.time()
+    print(
+        f"Time to init AuroraDataset: {time_end_load_xarray - time_start_load_xarray}"
+    )
+
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
@@ -61,6 +67,7 @@ def main(download_path: str, xpu: bool = False):
         time_start = time.time()
 
     avg_time = sum(times[1:]) / len(times[1:])
+    print(f"Time for first epoch: {times[0]}")
     print(f"Average time per epoch (ignoring first): {avg_time}")
     print(f"Total time for {len(times)} epochs: {sum(times)}")
 
