@@ -24,7 +24,7 @@ if args.xpu:
 
 
 def main(download_path: str, xpu: bool = False):
-    start_time_total = time.time()
+    time_start_total = time.time()
 
     download_path = Path(download_path)
 
@@ -71,8 +71,8 @@ def main(download_path: str, xpu: bool = False):
     print(f"Average time per epoch (ignoring first): {avg_time}")
     print(f"Total time for {len(times)} epochs: {sum(times)}")
 
-    end_time_total = time.time()
-    print(f"Total time: {end_time_total - start_time_total}")
+    time_end_total = time.time()
+    print(f"Total time: {time_end_total - time_start_total}")
 
     print("done")
 
