@@ -5,9 +5,12 @@ import argparse
 import os
 import re
 import time
-from pathlib import Path
 import warnings
-warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
+from pathlib import Path
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message="TypedStorage is deprecated"
+)
 
 import torch
 import torch.nn as nn
@@ -16,6 +19,7 @@ from dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
+from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
@@ -81,6 +85,12 @@ def main(download_path: str, xpu: bool = False):
         comms_backend = "nccl"
         device_type = "cuda"
 
+    activities = [ProfilerActivity.CPU]
+    if device_type == "cuda":
+        activities.append(ProfilerActivity.CUDA)
+    if device_type == "xpu":
+        activities.append(ProfilerActivity.XPU)
+
     time_start_total = time.time()
 
     print("Initialising process group with backend", comms_backend, flush=True)
@@ -138,34 +148,36 @@ def main(download_path: str, xpu: bool = False):
     times = []
 
     time_start = time.time()
-    for batch, (X, y) in enumerate(data_loader):
-        print(f"batch {batch}...")
+    with profile(activities=activities, record_shapes=True) as prof:
+        with record_function("train"):
+            for batch, (X, y) in enumerate(data_loader):
+                print(f"batch {batch}...")
 
-        optimizer.zero_grad()
+                optimizer.zero_grad()
 
-        with torch.autocast(device_type=device_type):
-            print("performing forward pass...")
-            pred = model(X)
+                with torch.autocast(device_type=device_type):
+                    print("performing forward pass...")
+                    pred = model(X)
 
-            # only one of these is necessary
-            pred = pred.to(device)
-            y = y.to(device)
+                    # only one of these is necessary
+                    pred = pred.to(device)
+                    y = y.to(device)
 
-            # mean absolute error of one variable
-            print("calculating loss...")
+                    # mean absolute error of one variable
+                    print("calculating loss...")
 
-            # Todo: Are pred's of type PyTree and does it matter?
-            loss = mae(pred, y)
+                    # Todo: Are pred's of type PyTree and does it matter?
+                    loss = mae(pred, y)
 
-        print("performing backward pass...")
-        loss.backward()
+                print("performing backward pass...")
+                loss.backward()
 
-        print("optimizing...")
-        optimizer.step()
+                print("optimizing...")
+                optimizer.step()
 
-        time_end = time.time()
-        times.append(time_end - time_start)
-        time_start = time.time()
+                time_end = time.time()
+                times.append(time_end - time_start)
+                time_start = time.time()
 
     times = torch.Tensor(times).to(device)
     gathered_times = [torch.zeros(times.shape).to(device) for _ in range(WORLD_SIZE)]
@@ -186,6 +198,9 @@ def main(download_path: str, xpu: bool = False):
         print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
+    print(
+        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_time_total', row_limit=10)}"
+    )
     print("done")
 
 
