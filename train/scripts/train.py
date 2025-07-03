@@ -6,6 +6,8 @@ import os
 import re
 import time
 from pathlib import Path
+import warnings
+warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
 
 import torch
 import torch.nn as nn
@@ -165,22 +167,23 @@ def main(download_path: str, xpu: bool = False):
         times.append(time_end - time_start)
         time_start = time.time()
 
-    times = torch.Tensor(times)
-    gathered_times = [torch.zeros(times.shape) for _ in range(WORLD_SIZE)]
+    times = torch.Tensor(times).to(device)
+    gathered_times = [torch.zeros(times.shape).to(device) for _ in range(WORLD_SIZE)]
     all_gather(gathered_times, times)
-    print(f"{gathered_times=}")
 
     if int(RANK) == 0:
         avg_time = sum([sum(t[1:]) for t in gathered_times]) / sum(
             [len(times[1:]) for t in gathered_times]
         )
-        print(f"Average time per epoch (ignoring first): {avg_time}")
+        print(f"Average time per epoch (ignoring first): {avg_time} seconds")
+        print(f"Effective time for an epoch: {avg_time / WORLD_SIZE} seconds")
+        print(f"Equivalent training speed: {WORLD_SIZE / avg_time} epochs per seconds")
         total_time = sum([sum(t) for t in gathered_times])
         total_no_epochs = sum([len(t) for t in gathered_times])
         print(f"Total time for {total_no_epochs} epochs: {total_time}")
 
-    time_end_total = time.time()
-    print(f"Total time: {time_end_total - time_start_total}")
+        time_end_total = time.time()
+        print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
     print("done")
