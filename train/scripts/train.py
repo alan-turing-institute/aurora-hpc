@@ -199,9 +199,8 @@ def main(download_path: str, xpu: bool = False):
         print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
-    print(
-        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_mem_usage', row_limit=10)}"
-    )
+    print("Profiler results:")
+    print(prof.key_averages().table(sort_by=f"{device_type}_time_total", row_limit=20))
     print("done")
 
 
