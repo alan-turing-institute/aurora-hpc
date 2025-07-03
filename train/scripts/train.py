@@ -90,6 +90,7 @@ def main(download_path: str, xpu: bool = False):
         activities.append(ProfilerActivity.CUDA)
     if device_type == "xpu":
         activities.append(ProfilerActivity.XPU)
+    print(f"Profiling activities: {activities}")
 
     time_start_total = time.time()
 
@@ -148,7 +149,7 @@ def main(download_path: str, xpu: bool = False):
     times = []
 
     time_start = time.time()
-    with profile(activities=activities, record_shapes=True) as prof:
+    with profile(activities=activities, record_shapes=True, profile_memory=True) as prof:
         with record_function("train"):
             for batch, (X, y) in enumerate(data_loader):
                 print(f"batch {batch}...")
@@ -199,7 +200,7 @@ def main(download_path: str, xpu: bool = False):
 
     destroy_process_group()
     print(
-        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_time_total', row_limit=10)}"
+        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_mem_usage', row_limit=10)}"
     )
     print("done")
 

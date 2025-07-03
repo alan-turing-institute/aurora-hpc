@@ -34,7 +34,7 @@ def main():
         else "xpu" if torch.xpu.is_available() else "cpu"
     )
 
-    print(f"Using {device=}")
+    print(f"Using device: {str(device)}")
 
     print("loading model...")
     model = AuroraSmall()
@@ -75,8 +75,9 @@ def main():
         activities.append(ProfilerActivity.CUDA)
     if device == torch.device("xpu"):
         activities.append(ProfilerActivity.XPU)
+    print(f"Profiling activities: {activities}")
 
-    with profile(activities=activities, record_shapes=True) as prof:
+    with profile(activities=activities, record_shapes=True, profile_memory=True) as prof:
         with record_function("train"):
             time_start = time.time()
             for epoch, (X, y) in enumerate(
@@ -100,11 +101,11 @@ def main():
                 loss = mae(pred, y)
                 print(f"loss: {loss.item()}")
 
-                print("performing backward pass...")
-                loss.backward()
+                #print("performing backward pass...")
+                #loss.backward()
 
-                print("optimizing...")
-                optimizer.step()
+                #print("optimizing...")
+                #optimizer.step()
 
                 time_end = time.time()
                 times.append(time_end - time_start)
@@ -122,9 +123,11 @@ def main():
     print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
-    print(
-        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_time_total', row_limit=10)}"
-    )
+
+
+    print("Profiler results:")
+    print(prof.key_averages().table(sort_by=f'{str(device)}_time_total', row_limit=10))
+    print(prof.key_averages().table(sort_by=f"XPU_memory_usage", row_limit=10))
     print("done")
 
 
