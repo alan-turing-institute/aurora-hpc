@@ -41,7 +41,7 @@ pip install --quiet -e ../../aurora
 echo "## Running model"
 
 # Perform the prediction
-WORLD_SIZE=1 RANK=0 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=28743 python my_ddp.py
+WORLD_SIZE=1 RANK=0 LOCAL_RANK=0 MASTER_ADDR=127.0.0.1 MASTER_PORT=28743 python train.py
 
 echo "## Tidying up"
 
