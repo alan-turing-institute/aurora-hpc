@@ -41,6 +41,12 @@ def main(the_device: Device):
 
         cpu_tensor = torch.randn((1024, num_elements), dtype=torch.float32)
 
+        intended_size = size_mib * 1024 * 1024
+        actual_size = cpu_tensor.element_size() * cpu_tensor.nelement()
+        assert (
+            intended_size == actual_size
+        ), f"Wanted {intended_size}, got {actual_size}"
+
         # Warm up the GPU.
         _ = torch.randn(1, device=torch_device)
 

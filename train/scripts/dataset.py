@@ -55,12 +55,12 @@ class AuroraDataset(Dataset):
             chunks={} if use_dask else None,
         )
         self.surf_vars_ds = xr.open_dataset(
-            data_path / static_filepath,
+            data_path / surface_filepath,
             engine="netcdf4",
             chunks={} if use_dask else None,
         )
         self.atmos_vars_ds = xr.open_dataset(
-            data_path / static_filepath,
+            data_path / atmos_filepath,
             engine="netcdf4",
             chunks={} if use_dask else None,
         )
