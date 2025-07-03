@@ -81,6 +81,8 @@ def main(the_device: Device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("device", type=Device, choices=[x.value for x in list(Device)])
+    parser.add_argument(
+        "--device", type=Device, choices=[x.value for x in list(Device)], required=True
+    )
     args = parser.parse_args()
     main(the_device=args.device)
