@@ -28,7 +28,12 @@ def main():
         backend="gloo",
     )
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device(
+        "cuda"
+        if torch.cuda.is_available()
+        else "xpu" if torch.xpu.is_available() else "cpu"
+    )
+
     print(f"Using {device=}")
 
     print("loading model...")
@@ -65,7 +70,13 @@ def main():
 
     times = []
 
-    with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+    activities = [ProfilerActivity.CPU]
+    if device == torch.device("cuda"):
+        activities.append(ProfilerActivity.CUDA)
+    if device == torch.device("xpu"):
+        activities.append(ProfilerActivity.XPU)
+
+    with profile(activities=activities, record_shapes=True) as prof:
         with record_function("train"):
             time_start = time.time()
             for epoch, (X, y) in enumerate(
@@ -112,7 +123,7 @@ def main():
 
     destroy_process_group()
     print(
-        f"Profiler results: \n{prof.key_averages().table(sort_by='cpu_time_total', row_limit=10)}"
+        f"Profiler results: \n{prof.key_averages().table(sort_by=f'{str(device)}_time_total', row_limit=10)}"
     )
     print("done")
 
