@@ -21,17 +21,20 @@ class Device(str, Enum):
 
 
 def main(the_device: Device):
-    torch_device = "cpu"
-    synchronize = lambda: None
+    match the_device:
+        case Device.CPU:
+            torch_device = "cpu"
+            synchronize = lambda: None
+        case Device.XPU:
+            import intel_extension_for_pytorch as ipex
 
-    if the_device == Device.XPU:
-        import intel_extension_for_pytorch as ipex
-
-        torch_device = "xpu"
-        synchronize = torch.xpu.synchronize
-    elif the_device == Device.GPU:
-        torch_device = "cude"
-        synchronize = torch.cuda.synchronize
+            torch_device = "xpu"
+            synchronize = torch.xpu.synchronize
+        case Device.GPU:
+            torch_device = "cuda"
+            synchronize = torch.cuda.synchronize
+        case _:
+            raise RuntimeError()
 
     for size_mib in tqdm(SIZES_IN_MIB):
         num_elements = size_mib * 1024 // 4  # float32 = 4 bytes
@@ -49,9 +52,8 @@ def main(the_device: Device):
 
         timer = timeit.Timer(stmt=transfer)
 
-        times = timer.repeat(repeat=REPEATS, number=1)
+        times = np.array(timer.repeat(repeat=REPEATS, number=1))
 
-        times = np.array(times)
         mean_time = times.mean()
         std_time = times.std()
         bandwidth = size_mib / mean_time
