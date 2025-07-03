@@ -1,4 +1,4 @@
-"""Fine tune Aurora weather model."""
+"""Run AuroraSmall weather model (for testing on local machine)."""
 
 print("importing...")
 import os
@@ -10,6 +10,7 @@ import torch.nn as nn
 from aurora_loss import mae
 from dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import destroy_process_group, init_process_group
+from torch.profiler import ProfilerActivity, profile, record_function
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import AuroraSmall
@@ -64,38 +65,43 @@ def main():
 
     times = []
 
-    time_start = time.time()
-    for epoch, (X, y) in enumerate(data_loader):  # Only run 3 epochs for testing.
-        print(f"epoch {epoch}...")
+    with profile(activities=[ProfilerActivity.CPU], record_shapes=True) as prof:
+        with record_function("train"):
+            time_start = time.time()
+            for epoch, (X, y) in enumerate(
+                data_loader
+            ):  # Only run 3 epochs for testing.
+                print(f"epoch {epoch}...")
 
-        # Not really necessary, for one forward pass.
-        optimizer.zero_grad()
+                # Not really necessary, for one forward pass.
+                optimizer.zero_grad()
 
-        print("performing forward pass...")
-        pred = model(X)
+                print("performing forward pass...")
+                pred = model(X)
 
-        # space constraints
-        # pred = pred.to("cpu")
+                # space constraints
+                # pred = pred.to("cpu")
 
-        # mean absolute error of one variable
-        print("calculating loss...")
+                # mean absolute error of one variable
+                print("calculating loss...")
 
-        # Todo: Are pred's of type PyTree and does it matter?
-        loss = mae(pred, y)
+                # Todo: Are pred's of type PyTree and does it matter?
+                loss = mae(pred, y)
+                print(f"loss: {loss.item()}")
 
-        # print("performing backward pass...")
-        # loss.backward()
+                print("performing backward pass...")
+                loss.backward()
 
-        # print("optimizing...")
-        # optimizer.step()
+                print("optimizing...")
+                optimizer.step()
 
-        time_end = time.time()
-        times.append(time_end - time_start)
-        time_start = time.time()
+                time_end = time.time()
+                times.append(time_end - time_start)
+                time_start = time.time()
 
-        if epoch == 2:
-            print("Stopping after 3 epochs for testing.")
-            break
+                if epoch == 2:
+                    print("Stopping after 3 epochs for testing purposes.")
+                    break
 
     avg_time = sum(times[1:]) / len(times[1:])
     print(f"Average time per epoch (ignoring first): {avg_time}")
@@ -105,6 +111,9 @@ def main():
     print(f"Total time: {time_end_total - time_start_total}")
 
     destroy_process_group()
+    print(
+        f"Profiler results: \n{prof.key_averages().table(sort_by='cpu_time_total', row_limit=10)}"
+    )
     print("done")
 
 
