@@ -6,6 +6,7 @@
 #SBATCH -c 24  # Number of cores per task
 #SBATCH -N 1 # Number as nodes
 #SBATCH --gres=gpu:4 # Number of requested GPUs per node
+#SBATCH --ntasks-per-node=4 # MPI ranks per node
 #SBATCH --time 01:00:00
 
 # 1 node, 4 GPUs
@@ -41,7 +42,7 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-mpirun -prepend-rank -n 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
 
 deactivate
 popd

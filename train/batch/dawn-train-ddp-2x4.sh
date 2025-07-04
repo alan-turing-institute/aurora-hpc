@@ -6,6 +6,7 @@
 #SBATCH -c 24  # Number of cores per task
 #SBATCH -N 2 # Number as nodes
 #SBATCH --gres=gpu:4 # GPUs per node
+#SBATCH --ntasks-per-node=2 # MPI ranks per node
 #SBATCH --time 01:00:00
 
 # 2 node, 4 GPUs
@@ -48,7 +49,7 @@ sycl-ls
 
 # https://github.com/alan-turing-institute/hpc-landscape/blob/5ec2e4ff5c8358db467fbeb4c71902aeb9b9af7c/DAWN/hints-and-tips/sbatch_example.sh#L93
 # mpirun -prepend-rand -n 4 bash -c 'stdbuf -o0 xpumcli dump -t 0,1 -m 0,1,2,5 -i 1 > gpu-${PMI_RANK}.out'
-mpirun -prepend-rank -n 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+mpirun -prepend-rank -n 4 -ppn 2 python train.py --xpu -d ../../dawn/era5/era_v_inf/
 
 deactivate
 popd
