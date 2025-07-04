@@ -5,11 +5,11 @@
 #SBATCH --partition=pvc9 # Dawn PVC partition
 #SBATCH -c 24  # Number of cores per task
 #SBATCH --gres=gpu:4 # Number of requested GPUs per node
+#SBATCH -N 2 # 2 nodes
 #SBATCH --time 01:00:00
 
 # 2 node, 8 GPUs
-# For this we can use train.py since we don't need to 'skip' any GPUs
-
+# For this we don't need to 'skip' any GPUs
 
 #set -o xtrace
 set -o errexit
@@ -20,6 +20,9 @@ module load lua
 module load intel-oneapi-ccl/2021.14.0
 module load intel-oneapi-mpi/2021.14.1
 module load intel-oneapi-mkl/2025.0.1
+
+# load intel oneapi compilers (gives us sycl-ls command)
+module load intel-oneapi-compilers/2025.0.3/gcc/sb5vj5us
 
 pushd ../scripts
 
@@ -40,6 +43,8 @@ export ZES_ENABLE_SYSMAN=1
 
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
+
+sycl-ls
 
 mpirun -prepend-rank -n 8 python train.py --xpu -d ../../dawn/era5/era_v_inf/
 

@@ -9,7 +9,7 @@
 #SBATCH --time 01:00:00
 
 # 1 node, 4 GPUs
-# For this we can use train.py since we don't need to 'skip' any GPUs
+# For this we don't need to 'skip' any GPUs
 
 #set -o xtrace
 set -o errexit
