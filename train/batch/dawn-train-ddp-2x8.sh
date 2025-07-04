@@ -1,12 +1,16 @@
 #!/bin/bash -l
-#SBATCH --job-name=example-ddp
+#SBATCH --job-name=2x8
+#SBATCH --output=two_nodes_eight_gpus.out
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
-#SBATCH -n 8   # Number of tasks (usually number of MPI ranks)
 #SBATCH -c 24  # Number of cores per task
 #SBATCH --gres=gpu:4 # Number of requested GPUs per node
 #SBATCH -N 2 # 2 nodes
+#SBATCH --ntasks-per-node=4 # MPI ranks per node
 #SBATCH --time 01:00:00
+
+# 2 node, 8 GPUs
+# For this we don't need to 'skip' any GPUs
 
 #set -o xtrace
 set -o errexit
@@ -17,6 +21,9 @@ module load lua
 module load intel-oneapi-ccl/2021.14.0
 module load intel-oneapi-mpi/2021.14.1
 module load intel-oneapi-mkl/2025.0.1
+
+# load intel oneapi compilers (gives us sycl-ls command)
+module load intel-oneapi-compilers/2025.0.3/gcc/sb5vj5us
 
 pushd ../scripts
 
@@ -38,7 +45,9 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-mpirun -prepend-rank -n 8 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+sycl-ls
+
+mpirun -prepend-rank -n 8 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
 
 deactivate
 popd

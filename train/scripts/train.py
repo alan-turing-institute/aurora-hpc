@@ -5,9 +5,12 @@ import argparse
 import os
 import re
 import time
-from pathlib import Path
 import warnings
-warnings.filterwarnings('ignore', category=UserWarning, message='TypedStorage is deprecated')
+from pathlib import Path
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message="TypedStorage is deprecated"
+)
 
 import torch
 import torch.nn as nn
@@ -47,6 +50,7 @@ if args.xpu:
 
     # MPI_LOCALRANKID provenance unknown
     LOCAL_RANK = int(os.environ["MPI_LOCALRANKID"])
+    print(f"{LOCAL_RANK=}")
 
     # get the master address
     numbers = re.compile("\d+")
