@@ -29,7 +29,7 @@ atmos_vars_ds = xr.open_dataset(
 
 
 def main(steps):
-    start_time_total = time.time()
+    time_start_total = time.time()
     i = 1  # Select this time index in the downloaded data.
 
     print("batching...")
@@ -96,8 +96,8 @@ def main(steps):
 
     import pickle
 
-    end_time_total = time.time()
-    print(f"Total time: {end_time_total - start_time_total}")
+    time_end_total = time.time()
+    print(f"Total time: {time_end_total - time_start_total}")
 
 
 if __name__ == "__main__":
