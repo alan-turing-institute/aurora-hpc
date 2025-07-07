@@ -1,6 +1,6 @@
 """Fine tune Aurora weather model."""
 
-print("importing...")
+print("importing...", flush=True)
 import argparse
 import os
 import re
@@ -50,7 +50,7 @@ if args.xpu:
 
     # MPI_LOCALRANKID provenance unknown
     LOCAL_RANK = int(os.environ["MPI_LOCALRANKID"])
-    print(f"{LOCAL_RANK=}")
+    print(f"{LOCAL_RANK=}", flush=True)
 
     # get the master address
     numbers = re.compile("\d+")
@@ -96,9 +96,9 @@ def main(download_path: str, xpu: bool = False):
     )
 
     device = f"{device_type}:{LOCAL_RANK}"
-    print(f"Using {device=}")
+    print(f"Using {device=}", flush=True)
 
-    print("loading model...")
+    print("loading model...", flush=True)
     model = Aurora(
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
@@ -109,7 +109,7 @@ def main(download_path: str, xpu: bool = False):
 
     download_path = Path(download_path)
 
-    print("preparing model...")
+    print("preparing model...", flush=True)
     model.configure_activation_checkpointing()
     model = FSDP(
         model,
@@ -122,7 +122,7 @@ def main(download_path: str, xpu: bool = False):
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
 
-    print("loading data...")
+    print("loading data...", flush=True)
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
@@ -143,12 +143,12 @@ def main(download_path: str, xpu: bool = False):
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
-        print(f"batch {batch}...")
+        print(f"batch {batch}...", flush=True)
 
         optimizer.zero_grad()
 
         with torch.autocast(device_type=device_type):
-            print("performing forward pass...")
+            print("performing forward pass...", flush=True)
             pred = model(X)
 
             # only one of these is necessary
@@ -156,19 +156,20 @@ def main(download_path: str, xpu: bool = False):
             y = y.to(device)
 
             # mean absolute error of one variable
-            print("calculating loss...")
+            print("calculating loss...", flush=True)
 
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
 
-        print("performing backward pass...")
+        print("performing backward pass...", flush=True)
         loss.backward()
 
-        print("optimizing...")
+        print("optimizing...", flush=True)
         optimizer.step()
 
         time_end = time.time()
         times.append(time_end - time_start)
+        print("batch took:", time_end - time_start, flush=True)
         time_start = time.time()
 
     times = torch.Tensor(times).to(device)
@@ -179,18 +180,25 @@ def main(download_path: str, xpu: bool = False):
         avg_time = sum([sum(t[1:]) for t in gathered_times]) / sum(
             [len(times[1:]) for t in gathered_times]
         )
-        print(f"Average time per epoch (ignoring first): {avg_time} seconds")
-        print(f"Effective time for an epoch: {avg_time / WORLD_SIZE} seconds")
-        print(f"Equivalent training speed: {WORLD_SIZE / avg_time} epochs per seconds")
+        print(
+            f"Average time per epoch (ignoring first): {avg_time} seconds", flush=True
+        )
+        print(
+            f"Effective time for an epoch: {avg_time / WORLD_SIZE} seconds", flush=True
+        )
+        print(
+            f"Equivalent training speed: {WORLD_SIZE / avg_time} epochs per seconds",
+            flush=True,
+        )
         total_time = sum([sum(t) for t in gathered_times])
         total_no_epochs = sum([len(t) for t in gathered_times])
-        print(f"Total time for {total_no_epochs} epochs: {total_time}")
+        print(f"Total time for {total_no_epochs} epochs: {total_time}", flush=True)
 
         time_end_total = time.time()
-        print(f"Total time: {time_end_total - time_start_total}")
+        print(f"Total time: {time_end_total - time_start_total}", flush=True)
 
     destroy_process_group()
-    print("done")
+    print("done", flush=True)
 
 
 main(args.download_path, xpu=args.xpu)
