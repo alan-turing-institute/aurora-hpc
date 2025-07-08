@@ -113,7 +113,7 @@ class AuroraDataset(Dataset):
                     int(level) for level in self.atmos_vars_ds.pressure_level.values
                 ),
             ),
-        )
+        )#.to("cpu")
 
     def __getitem__(self, index):
         """Returns input and target batches for the given index.

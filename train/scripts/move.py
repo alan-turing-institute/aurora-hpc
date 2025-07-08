@@ -100,16 +100,12 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
-        if batch > 3:
-            break
 
-        print(f"batch {batch}...", flush=True)
 
+        #X = X.to("xpu")
         optimizer.zero_grad()
-
-        with torch.autocast(device_type=device_type):
+        with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
             y = y.to(device)
-            print("performing forward pass...", flush=True)
             pred = model(X)
 
             # only one of these is necessary
@@ -121,11 +117,18 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
 
-        print("performing backward pass...", flush=True)
-        loss.backward()
+        if batch > 4:
+            break
+        elif batch > 2:
+            print("performing backward pass...", flush=True)
+            starter = time.perf_counter()
+            loss.backward()
+            print("synchronizing")
+            torch.xpu.synchronize()
+            print("sync and backprop took", time.perf_counter() - starter)
 
-        print("optimizing...", flush=True)
-        optimizer.step()
+
+        print(f"batch {batch}...", flush=True)
 
         time_end = time.time()
         times.append(time_end - time_start)
