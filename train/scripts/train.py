@@ -14,14 +14,14 @@ warnings.filterwarnings(
 
 import torch
 import torch.nn as nn
-from src.aurora_loss import mae
-from src.dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
+from aurora_hpc.aurora_loss import mae
+from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
