@@ -58,7 +58,19 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
     )
-    model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    #model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+
+    # Some sense of the size. See
+    # https://discuss.pytorch.org/t/finding-model-size/130275
+    param_size = 0
+    for param in model.parameters():
+        param_size += param.nelement() * param.element_size()
+    buffer_size = 0
+    for buffer in model.buffers():
+        buffer_size += buffer.nelement() * buffer.element_size()
+    size_all_mb = (param_size + buffer_size) / 1024**2
+    print('model size after: {:.3f}MB'.format(size_all_mb))
+
     if not xpu:
         torch.cuda.set_device(LOCAL_RANK)
     else:
