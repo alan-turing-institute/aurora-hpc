@@ -22,9 +22,9 @@ class AuroraDataset(Dataset):
     Args:
         data_path (Path): Directory to read in the data from.
         t (int): the number of additional timesteps to load alongside each datapoint.
-        static_filepath (Path): file containing the static variable data, relative to `data_path`.
-        surface_filepath (Path): file containing the surface-level variable data, relative to `data_path`.
-        atmos_filepath (Path): file containing the atmospheric variable data, relative to `data_path`.
+        static_data (Path): file containing the static variable data, relative to `data_path`.
+        surface_data (Path): file containing the surface-level variable data, relative to `data_path`.
+        atmos_data (Path): file containing the atmospheric variable data, relative to `data_path`.
         use_dask (bool): Whether to use dask to load the datasets.
     """
 
@@ -32,38 +32,51 @@ class AuroraDataset(Dataset):
         self,
         data_path: str | Path,
         t: int,
-        static_filepath: str | Path = Path("static.nc"),
-        surface_filepath: str | Path = Path("2023-01-01-surface-level.nc"),
-        atmos_filepath: str | Path = Path("2023-01-01-atmospheric.nc"),
+        static_data: str | Path | xr.Dataset = Path("static.nc"),
+        surface_data: str | Path | xr.Dataset = Path("2023-01-01-surface-level.nc"),
+        atmos_data: str | Path | xr.Dataset = Path("2023-01-01-atmospheric.nc"),
         use_dask: bool = False,
     ):
         self.t = t
 
-        # Convert string paths to Path objects if necessary
         if isinstance(data_path, str):
             data_path = Path(data_path)
-        if isinstance(static_filepath, str):
-            static_filepath = Path(static_filepath)
-        if isinstance(surface_filepath, str):
-            surface_filepath = Path(surface_filepath)
-        if isinstance(atmos_filepath, str):
-            atmos_filepath = Path(atmos_filepath)
 
-        self.static_vars_ds = xr.open_dataset(
-            data_path / static_filepath,
-            engine="netcdf4",
-            chunks={} if use_dask else None,
-        )
-        self.surf_vars_ds = xr.open_dataset(
-            data_path / surface_filepath,
-            engine="netcdf4",
-            chunks={} if use_dask else None,
-        )
-        self.atmos_vars_ds = xr.open_dataset(
-            data_path / atmos_filepath,
-            engine="netcdf4",
-            chunks={} if use_dask else None,
-        )
+        if isinstance(static_data, xr.Dataset):
+            # Set the attribute directly if it's already an xarray Dataset
+            self.static_vars_ds = static_data
+        else:
+            # Otherwise load the dataset from a file
+            if isinstance(static_data, str):
+                static_data = Path(static_data)
+            self.static_vars_ds = xr.open_dataset(
+                data_path / static_data,
+                engine="netcdf4",
+                chunks={} if use_dask else None,
+            )
+
+        if isinstance(surface_data, xr.Dataset):
+            self.surf_vars_ds = surface_data
+        else:
+            if isinstance(surface_data, str):
+                surface_data = Path(surface_data)
+            self.surf_vars_ds = xr.open_dataset(
+                data_path / surface_data,
+                engine="netcdf4",
+                chunks={} if use_dask else None,
+            )
+
+        if isinstance(atmos_data, xr.Dataset):
+            self.atmos_vars_ds = atmos_data
+        else:
+            if isinstance(atmos_data, str):
+                atmos_data = Path(atmos_data)
+            self.atmos_vars_ds = xr.open_dataset(
+                data_path / atmos_data,
+                engine="netcdf4",
+                chunks={} if use_dask else None,
+            )
+
         self.length = (
             len(torch.from_numpy(self.surf_vars_ds["t2m"].values)) - self.t - 1
         )
