@@ -122,7 +122,11 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
             loss = mae(pred, y)
 
         print("performing backward pass...", flush=True)
+
+        starter = time.perf_counter()
         loss.backward()
+        torch.xpu.synchronize()
+        print("back took", time.perf_counter() - starter)
 
         print("optimizing...", flush=True)
         optimizer.step()

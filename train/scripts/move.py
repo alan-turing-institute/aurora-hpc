@@ -21,7 +21,8 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 from torch.utils.data import DataLoader, DistributedSampler
 
-from aurora import Aurora
+from aurora import Aurora, AuroraSmall
+from functools import partial
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
@@ -53,102 +54,122 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
     device = f"{device_type}"
     print(f"Using {device=}", flush=True)
 
-    print("loading model...", flush=True)
-    model = Aurora(
-        use_lora=False,  # Model was not fine-tuned.
-        autocast=True,  # Use AMP.
-    )
-    #model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    AuroraI = partial(
+            Aurora,
+            encoder_depths=(2, 6, 2), 
+            encoder_num_heads=(4, 8, 16),
+            decoder_depths=(2, 6, 2),
+            decoder_num_heads=(16, 8, 4),
+            embed_dim=256,
+            num_heads=8,
+            use_lora=False,
+            )
+    #AuroraII =     #for constructor in [Aurora, AuroraSmall]: #, AuroraI, AuroraII]
+    for i in range(5,30):
+        print("loading model...", i, flush=True)
+        constructor = partial(
+            Aurora,
+            encoder_depths=(i, i, i),
+            encoder_num_heads=(4, 8, 16),
+            decoder_depths=(i, i, i),
+            decoder_num_heads=(16, 8, 4),
+            embed_dim=256,
+            num_heads=8,
+            )
 
-    # Some sense of the size. See
-    # https://discuss.pytorch.org/t/finding-model-size/130275
-    param_size = 0
-    for param in model.parameters():
-        param_size += param.nelement() * param.element_size()
-    buffer_size = 0
-    for buffer in model.buffers():
-        buffer_size += buffer.nelement() * buffer.element_size()
-    size_all_mb = (param_size + buffer_size) / 1024**2
-    print('model size after: {:.3f}MB'.format(size_all_mb))
+        model = constructor(
+            use_lora=False,  # Model was not fine-tuned.
+            autocast=True,  # Use AMP.
+        )
+        #model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 
-    if not xpu:
-        torch.cuda.set_device(LOCAL_RANK)
-    else:
-        torch.xpu.set_device("xpu:0")
+        # Some sense of the size. See
+        # https://discuss.pytorch.org/t/finding-model-size/130275
+        param_size = 0
+        for param in model.parameters():
+            param_size += param.nelement() * param.element_size()
+        buffer_size = 0
+        for buffer in model.buffers():
+            buffer_size += buffer.nelement() * buffer.element_size()
+        size_all_mb = (param_size + buffer_size) / 1024**2
+        print('model size after: {:.3f}MB'.format(size_all_mb))
 
-    download_path = Path(download_path)
+        if not xpu:
+            torch.cuda.set_device(LOCAL_RANK)
+        else:
+            torch.xpu.set_device("xpu:0")
 
-    print("preparing model...", flush=True)
-    model.configure_activation_checkpointing()
-    model = model.to(device)
-    model.train()
+        download_path = Path(download_path)
 
-    # AdamW, as used in the paper.
-    optimizer = torch.optim.AdamW(model.parameters())
+        print("preparing model...", flush=True)
+        model.configure_activation_checkpointing()
+        model = model.to(device)
+        model.train()
 
-    if xpu and xpu_optimize:
-        print("calling ipex.optimize...", flush=True)
-        model, optimizer = ipex.optimize(model, optimizer=optimizer)
+        # AdamW, as used in the paper.
+        optimizer = torch.optim.AdamW(model.parameters())
 
-
-    print("loading data...", flush=True)
-    dataset = AuroraDataset(
-        data_path=download_path,
-        t=1,
-        static_filepath=Path("static.nc"),
-        surface_filepath=Path("2023-01-surface-level.nc"),
-        atmos_filepath=Path("2023-01-atmospheric.nc"),
-    )
-    data_loader = DataLoader(
-        dataset=dataset,
-        batch_size=1,  # If we set a batch size we'll need a collate_fn
-        shuffle=False,  # We don't need to shuffle.
-        collate_fn=aurora_collate_fn,
-        num_workers=10,
-        pin_memory=True,
-    )
-
-    times = []
-
-    time_start = time.time()
-    for batch, (X, y) in enumerate(data_loader):
+        if xpu and xpu_optimize:
+            print("calling ipex.optimize...", flush=True)
+            model, optimizer = ipex.optimize(model, optimizer=optimizer)
 
 
-        #X = X.to("xpu")
-        optimizer.zero_grad()
-        with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-            y = y.to(device)
-            pred = model(X)
+        print("loading data...", flush=True)
+        dataset = AuroraDataset(
+            data_path=download_path,
+            t=1,
+            static_filepath=Path("static.nc"),
+            surface_filepath=Path("2023-01-01-surface-level.nc"),
+            atmos_filepath=Path("2023-01-01-atmospheric.nc"),
+        )
+        data_loader = DataLoader(
+            dataset=dataset,
+            batch_size=1,  # If we set a batch size we'll need a collate_fn
+            shuffle=False,  # We don't need to shuffle.
+            collate_fn=aurora_collate_fn,
+            num_workers=10,
+            pin_memory=True,
+        )
 
-            # only one of these is necessary
-            pred = pred.to(device)
+        times = []
 
-            # mean absolute error of one variable
-            print("calculating loss...", flush=True)
+        time_start = time.time()
+        for batch, (X, y) in enumerate(data_loader):
+            #X = X.to("xpu")
+            optimizer.zero_grad()
+            with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                y = y.to(device)
+                pred = model(X)
 
-            # Todo: Are pred's of type PyTree and does it matter?
-            loss = mae(pred, y)
+                # only one of these is necessary
+                pred = pred.to(device)
 
-        if batch > 4:
-            break
-        elif batch > 2:
+                # mean absolute error of one variable
+                print("calculating loss...", flush=True)
+
+                # Todo: Are pred's of type PyTree and does it matter?
+                loss = mae(pred, y)
+
+            #if batch > 4:
+            #elif batch > 2:
             print("performing backward pass...", flush=True)
             starter = time.perf_counter()
             loss.backward()
             print("synchronizing")
             torch.xpu.synchronize()
             print("sync and backprop took", time.perf_counter() - starter)
+            break
 
 
-        print(f"batch {batch}...", flush=True)
+            print(f"batch {batch}...", flush=True)
 
-        time_end = time.time()
-        times.append(time_end - time_start)
-        print("batch took:", time_end - time_start, flush=True)
-        time_start = time.time()
+            time_end = time.time()
+            times.append(time_end - time_start)
+            print("batch took:", time_end - time_start, flush=True)
+            time_start = time.time()
 
-        time_end_total = time.time()
-        print(f"Total time: {time_end_total - time_start_total}", flush=True)
+            time_end_total = time.time()
+            print(f"Total time: {time_end_total - time_start_total}", flush=True)
 
     print("done", flush=True)
 
