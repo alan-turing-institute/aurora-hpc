@@ -14,8 +14,8 @@ warnings.filterwarnings(
 
 import torch
 import torch.nn as nn
-from aurora_loss import mae
-from dataset import AuroraDataset, aurora_collate_fn
+from src.aurora_loss import mae
+from src.dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
@@ -126,9 +126,9 @@ def main(download_path: str, xpu: bool = False):
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
-        static_filepath=Path("static.nc"),
-        surface_filepath=Path("2023-01-surface-level.nc"),
-        atmos_filepath=Path("2023-01-atmospheric.nc"),
+        static_data=Path("static.nc"),
+        surface_data=Path("2023-01-surface-level.nc"),
+        atmos_data=Path("2023-01-atmospheric.nc"),
     )
     sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
