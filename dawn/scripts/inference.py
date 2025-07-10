@@ -14,7 +14,7 @@ import torch
 from aurora_hpc.dataset import AuroraDataset
 
 
-def main(download_path: str, steps: int, save: bool = False):
+def main(download_path: str, nsteps: int, save: bool = False):
     time_start_total = time.time()
 
     print("Loading data...")
@@ -40,7 +40,7 @@ def main(download_path: str, steps: int, save: bool = False):
 
     with torch.inference_mode():
         time_start = time.time()
-        for pred in rollout(model, batch, steps=steps):
+        for pred in rollout(model, batch, steps=nsteps):
             preds.append(pred.to("cpu"))
             time_end = time.time()
             print(f"Time for one step: {time_end - time_start}")
@@ -48,8 +48,8 @@ def main(download_path: str, steps: int, save: bool = False):
             time_start = time.time()
 
     avg_time = sum(times[1:]) / len(times[1:])  # Exclude the first step time
-    print(f"Average time for last {steps - 1} steps: {avg_time}")
-    print(f"Total time for {steps} steps: {sum(times)}")
+    print(f"Average time for last {nsteps - 1} steps: {avg_time}")
+    print(f"Total time for {nsteps} steps: {sum(times)}")
 
     import pickle
 
@@ -84,4 +84,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    main(args.download_path, steps=args.steps, save=args.save)
+    main(args.download_path, nsteps=args.nsteps, save=args.save)
