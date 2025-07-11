@@ -53,7 +53,7 @@ vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
 # do this 4 times, once per GPU
-for i in {0..4}; do
+for i in {0..3}; do
     CUDA_VISIBLE_DEVICES=$i python inference-timing.py -n 28 --save -o preds_$i.pkl > inference_28_steps_$i.txt &
 done
 
