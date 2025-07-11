@@ -14,7 +14,9 @@ import torch
 from aurora_hpc.dataset import AuroraDataset
 
 
-def main(download_path: str, nsteps: int, save: bool = False):
+def main(
+    download_path: str, nsteps: int, save: bool = False, output_file: str = "preds.pkl"
+):
     time_start_total = time.time()
 
     print("Loading data...")
@@ -57,8 +59,8 @@ def main(download_path: str, nsteps: int, save: bool = False):
     print(f"Total time: {time_end_total - time_start_total}")
 
     if save:
-        print("Saving predictions...")
-        with open("preds.pkl", "wb") as f:
+        print(f"Saving predictions to {output_file}")
+        with open(output_file, "wb") as f:
             pickle.dump(preds, f)
 
 
@@ -82,6 +84,17 @@ if __name__ == "__main__":
         action="store_true",
         help="whether to save the predictions",
     )
+    parser.add_argument(
+        "--output_file",
+        "-o",
+        help="name of file to save outputs (should be a .pkl)",
+        default="preds.pkl",
+    )
     args = parser.parse_args()
 
-    main(args.download_path, nsteps=args.nsteps, save=args.save)
+    main(
+        args.download_path,
+        nsteps=args.nsteps,
+        save=args.save,
+        output_file=args.output_file,
+    )
