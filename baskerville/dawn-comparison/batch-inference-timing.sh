@@ -42,6 +42,7 @@ python -m venv venv
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
 pip install --quiet -e ../../aurora
+pip install --quiet -e ../../aurora-hpc
 
 echo
 echo "## Running model"
@@ -51,7 +52,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
 vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
-python inference-timing.py 28
+python inference-timing.py --nsteps 28
 
 echo
 echo "## Tidying up"
