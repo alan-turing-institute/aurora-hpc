@@ -7,12 +7,12 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
-from aurora_loss import mae
-from dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import destroy_process_group, init_process_group
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import AuroraSmall
+from aurora_hpc.aurora_loss import mae
+from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 os.environ["MASTER_ADDR"] = "0.0.0.0"
 os.environ["MASTER_PORT"] = "29876"
@@ -48,9 +48,9 @@ def main():
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
-        static_filepath=Path("static.nc"),
-        surface_filepath=Path("2023-01-surface-level.nc"),
-        atmos_filepath=Path("2023-01-atmospheric.nc"),
+        static_data=Path("static.nc"),
+        surface_data=Path("2023-01-surface-level.nc"),
+        atmos_data=Path("2023-01-atmospheric.nc"),
     )
 
     sampler = DistributedSampler(dataset)
