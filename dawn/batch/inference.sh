@@ -20,4 +20,4 @@ cd ../scripts/
 
 # 6h timestep -> 4 steps/day -> 365*4 = 1460 steps/year
 # removing 1 day (4 steps) so to allow for day 1 and day 365.
-python inference.py -d ../era_5/era_v_inf/ -n 1456 --save 
+python inference.py -d ../era_5/era_v_inf/ -n 1456 --save
