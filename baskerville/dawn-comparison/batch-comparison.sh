@@ -41,7 +41,7 @@ python -m venv venv
 
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet -e microsoft-aurora
 pip install --quiet -e ../../aurora-hpc
 
 echo
@@ -52,7 +52,9 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
 vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
-python inference-timing.py --nsteps 28 --save --output_file preds-bask.pkl
+# already done!
+# python inference-timing.py --nsteps 28 --save --output_file preds-bask.pkl
+
 
 # Generate graphs
 python compare-results.py

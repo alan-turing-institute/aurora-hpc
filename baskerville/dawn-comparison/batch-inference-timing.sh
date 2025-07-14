@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-gpu 36
 #SBATCH --constraint=a100_80
 #SBATCH --job-name auroria-comparison
-#SBATCH --output log-timing.txt
+#SBATCH --output log-inference-timing.txt
 
 # Execute using:
 # sbatch ./batch-inference-timing.sh
@@ -41,7 +41,7 @@ python -m venv venv
 
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet microsoft-aurora
 pip install --quiet -e ../../aurora-hpc
 
 echo
