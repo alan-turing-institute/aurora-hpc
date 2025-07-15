@@ -42,7 +42,7 @@ python -m venv venv
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
 pip install --quiet microsoft-aurora
-pip install --quiet -e ../../aurora-hpc
+pip install --quiet -e ../../
 
 echo
 echo "## Running model"
