@@ -3,17 +3,19 @@
 
 # SPDX-License-Identifier: MIT
 # Copyright 2025 The Alan Turing Institute
+from pathlib import Path
 
 import torch
 import xarray as xr
 import matplotlib.pyplot as plt
 import pickle
 import numpy as np
-from aurora_loss import mae
 from torch.nn import MSELoss
 
 from aurora import Aurora, rollout, Batch, Metadata
-from pathlib import Path
+from aurora_hpc.aurora_loss import mae
+from aurora_hpc.dataset import batch_collate_fn
+
 
 print("Loading dataset")
 # Data will be downloaded here.
@@ -28,18 +30,75 @@ atmos_vars_ds = xr.open_dataset(
     download_path / "2023-01-01-08-atmospheric.nc", engine="netcdf4"
 )
 
-def load_data(filename):
+def load_data(filename) -> list:
     print("Loading pickle file: {}".format(filename))
     with open(filename, "rb") as f:
         preds = pickle.load(f)
     return preds
 
+def average_data(preds_list: list, return_std_devs: bool = False):
+    """Average data across multiple lists of predictions.
+
+    Parameters
+    ----------
+    preds_list : list
+        List of lists of predictions
+    return_std_devs : bool, optional
+        Whether to return the standard deviations too, by default False
+
+    Returns
+    -------
+    list
+        If `return_std_devs` is False, a list of averaged predictions where each item is a Batch.
+        If `return_std_devs` is True, a tuple of three lists, the first being the averaged predictions,
+        the second being the upper standard deviations, and the third being the lower standard deviations.
+    """
+    print("Averaging data across {} predictions".format(len(preds_list)))
+
+    nsteps = len(preds_list[0]) # Number of timesteps predicted
+
+    avg_preds = []
+    if return_std_devs:
+        std_devs_lower = []
+        std_devs_upper = []
+
+    for step in range(nsteps):
+        # Use batch_collate_fn to combine the predictions for this step
+        avg_batch = batch_collate_fn(
+            [preds[step] for preds in preds_list],
+        )
+        if return_std_devs:
+            std_dev_lower_batch = avg_batch
+            std_dev_upper_batch = avg_batch
+        # surface vars
+        for k, v in avg_batch.surf_vars.items():
+            avg_batch.surf_vars[k] = v.mean(dim=0, keepdim=True)
+            if return_std_devs:
+                std_dev_lower_batch.surf_vars[k] = avg_batch.surf_vars[k] + v.std(dim=0, keepdim=True)
+                std_dev_upper_batch.surf_vars[k] = avg_batch.surf_vars[k] - v.std(dim=0, keepdim=True)
+        # atmos vars
+        for k, v in avg_batch.atmos_vars.items():
+            avg_batch.atmos_vars[k] = v.mean(dim=0, keepdim=True)
+            if return_std_devs:
+                std_dev_lower_batch.atmos_vars[k] = avg_batch.atmos_vars[k] + v.std(dim=0, keepdim=True)
+                std_dev_upper_batch.atmos_vars[k] = avg_batch.atmos_vars[k] - v.std(dim=0, keepdim=True)
+
+        # static vars can be ignored as they are constant
+        # append the averaged batch to the list
+        avg_preds.append(avg_batch)
+        if return_std_devs:
+            std_devs_lower.append(std_dev_lower_batch)
+            std_devs_upper.append(std_dev_upper_batch)
+    if return_std_devs:
+        return avg_preds, std_devs_lower, std_devs_upper
+    return avg_preds
+
 def plot_predict_vs_ground(preds, filename):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
-    step = 27
-    pred = preds[step]
+    step = len(preds)
+    pred = preds[step] # use last step
 
     ax[0].imshow(pred.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
     ax[0].set_ylabel(str(pred.metadata.time[0]))
@@ -53,7 +112,12 @@ def plot_predict_vs_ground(preds, filename):
     ax[1].set_yticks([])
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
 
 def calculate_rmse(preds0, preds1):
     return np.sqrt(np.mean((preds0 - preds1)**2))
@@ -61,24 +125,18 @@ def calculate_rmse(preds0, preds1):
 def calculate_difference(vars0, vars1):
     return abs(vars0 - vars1)
 
-def plot_error_comparison(preds_dawn, preds_bask, filename):
+def plot_error_comparison(preds_dawn: list, preds_bask: list, filename):
     print("Plotting graph: {}".format(filename))
-    fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
     rmse = []
 
-    step = 27
+    steps = min(len(preds_dawn), len(preds_bask)) # should both be the same
     vmin = 0
     vmax = 5
 
-    for step in range(1, 28):
+    for step in range(1, steps):
         vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
         vars_preds_bask = preds_bask[step].surf_vars["2t"][0, 0].numpy()
-        vars_actual = surf_vars_ds["t2m"][2 + step][0:720,:].values
 
-        diff_dawn_bask_pred = calculate_difference(
-            vars_preds_dawn,
-            vars_preds_bask,
-        )
         rmse_dawn_bask_pred = calculate_rmse(
             vars_preds_dawn,
             vars_preds_bask,
@@ -92,13 +150,18 @@ def plot_error_comparison(preds_dawn, preds_bask, filename):
     ax.set_ylabel("Root Mean Square Error")
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
 
 def plot_errors(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
 
-    step = 27
+    step = min(len(preds_dawn), len(preds_bask)) # use last step
     vmin = 0
     #vmax = 5
 
@@ -180,7 +243,12 @@ def plot_errors(preds_dawn, preds_bask, filename):
     #plt.tight_layout()
     #fig.suptitle("Absolute error comparison for two-meter temperature in K ranged (0, 5) at rollout step 28")
     plt.tight_layout()
-    plt.savefig(filename, dpi=300, )
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
 
 def plot_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -222,17 +290,120 @@ def plot_losses(preds_dawn, preds_bask, filename):
             )
             loss = mae(pred, batch)
             losses.append(loss.item())
-            loss_list.append(losses)
+        loss_list.append(losses)
 
     fig, ax = plt.subplots(figsize=(8,5))
     ax.plot(loss_list[0], linestyle="", marker="x", label="DAWN")
     ax.plot(loss_list[1], linestyle="", marker="+", label="Baskerville")
     ax.set_xlabel("Rollout step")
     ax.set_ylabel("Mean Average Error")
-    ax.legend();
+    ax.legend()
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
+
+
+def plot_losses_with_std_devs(
+        avg_preds_dawn: list,
+        avg_preds_bask: list,
+        std_devs_lower_dawn: list,
+        std_devs_lower_bask: list,
+        std_devs_upper_dawn: list,
+        std_devs_upper_bask: list,
+        filename
+    ):
+    print("Plotting graph: {}".format(filename))
+    loss_list = []
+    loss_lower_list = []
+    loss_upper_list = []
+
+    dawn = (avg_preds_dawn, std_devs_lower_dawn, std_devs_upper_dawn)
+    bask = (avg_preds_bask, std_devs_lower_bask, std_devs_upper_bask)
+
+    for avg_preds, std_devs_lower, std_devs_upper in [dawn, bask]:
+        losses = []
+        losses_lower = []
+        losses_upper = []
+        for i, pred in enumerate(avg_preds):
+            # gt batch
+            batch = Batch(
+                surf_vars={
+                    # First select time points `i` and `i - 1`. Afterwards, `[None]` inserts a
+                    # batch dimension of size one.
+                    "2t": torch.from_numpy(surf_vars_ds["t2m"].values[[i+2]][None]),
+                    "10u": torch.from_numpy(surf_vars_ds["u10"].values[[i+2]][None]),
+                    "10v": torch.from_numpy(surf_vars_ds["v10"].values[[i+2]][None]),
+                    "msl": torch.from_numpy(surf_vars_ds["msl"].values[[i+2]][None]),
+                },
+                static_vars={
+                    # The static variables are constant, so we just get them for the first time.
+                    "z": torch.from_numpy(static_vars_ds["z"].values[0]),
+                    "slt": torch.from_numpy(static_vars_ds["slt"].values[0]),
+                    "lsm": torch.from_numpy(static_vars_ds["lsm"].values[0]),
+                },
+                atmos_vars={
+                    "t": torch.from_numpy(atmos_vars_ds["t"].values[[i+2]][None]),
+                    "u": torch.from_numpy(atmos_vars_ds["u"].values[[i+2]][None]),
+                    "v": torch.from_numpy(atmos_vars_ds["v"].values[[i+2]][None]),
+                    "q": torch.from_numpy(atmos_vars_ds["q"].values[[i+2]][None]),
+                    "z": torch.from_numpy(atmos_vars_ds["z"].values[[i+2]][None]),
+                },
+                metadata=Metadata(
+                    lat=torch.from_numpy(surf_vars_ds.latitude.values),
+                    lon=torch.from_numpy(surf_vars_ds.longitude.values),
+                    # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
+                    # `datetime.datetime`s. Note that this needs to be a tuple of length one:
+                    # one value for every batch element.
+                    time=(surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[i],),
+                    atmos_levels=tuple(int(level) for level in atmos_vars_ds.pressure_level.values),
+                ),
+            )
+            loss = mae(pred, batch)
+            loss_lower = mae(std_devs_lower[i], batch)
+            loss_upper = mae(std_devs_upper[i], batch)
+
+            losses.append(loss.item())
+            losses_lower.append(loss_lower.item())
+            losses_upper.append(loss_upper.item())
+
+        loss_list.append(losses)
+        loss_lower_list.append(losses_lower)
+        loss_upper_list.append(losses_upper)
+
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.plot(loss_list[0], linestyle="", marker="x", label="DAWN")
+    ax.plot(loss_list[1], linestyle="", marker="+", label="Baskerville")
+    ax.fill_between(
+        range(len(loss_list[0])),
+        loss_lower_list[0],
+        loss_upper_list[0],
+        alpha=0.3,
+        label="DAWN Std Devs"
+    )
+    ax.fill_between(
+        range(len(loss_list[1])),
+        loss_lower_list[1],
+        loss_upper_list[1],
+        alpha=0.3,
+        label="Baskerville Std Devs"
+    )
+    ax.set_xlabel("Rollout step")
+    ax.set_ylabel("Mean Average Error")
+    ax.legend()
+
+    plt.tight_layout()
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
+
 
 def plot_var_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -318,20 +489,23 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
     axs[1, 0].set_ylabel("Mean Average Error")
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
 
-preds_dawn = load_data("preds-dawn.pkl")
-preds_bask = load_data("preds-bask.pkl")
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
 
-plot_predict_vs_ground(preds_dawn, "plot-pvg-dawn.pdf")
-plot_predict_vs_ground(preds_bask, "plot-pvg-bask.pdf")
-plot_predict_vs_ground(preds_dawn, "plot-pvg-dawn.png")
-plot_predict_vs_ground(preds_bask, "plot-pvg-bask.png")
-plot_errors(preds_dawn, preds_bask, "plot-errors.pdf")
-plot_errors(preds_dawn, preds_bask, "plot-errors.png")
-plot_error_comparison(preds_dawn, preds_bask, "plot-error-comparison.pdf")
-plot_error_comparison(preds_dawn, preds_bask, "plot-error-comparison.png")
-plot_losses(preds_dawn, preds_bask, "plot-losses.pdf")
-plot_losses(preds_dawn, preds_bask, "plot-losses.png")
-plot_var_losses(preds_dawn, preds_bask, "plot-var-losses.pdf")
-plot_var_losses(preds_dawn, preds_bask, "plot-var-losses.png")
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
+
+if __name__ == "__main__":
+    preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(4)]
+    preds_bask = [load_data(f"preds_{i}-bask.pkl") for i i range(4)]
+
+    avg_preds_dawn = average_data(preds_dawn)
+    avg_preds_bask = average_data(preds_bask)
+
+    plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn")
+    plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask")
+    plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors")
+    plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
+    plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
+    plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
