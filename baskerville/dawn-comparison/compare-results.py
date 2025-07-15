@@ -16,6 +16,12 @@ from aurora import Aurora, rollout, Batch, Metadata
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import batch_collate_fn
 
+SURF_VARS_DS_KEYS_MAP = {
+    "2t": "t2m",
+    "10u": "u10",
+    "10v": "v10",
+    "msl": "msl",
+}
 
 print("Loading dataset")
 # Data will be downloaded here.
@@ -113,20 +119,35 @@ def average_data(
         return_vals.append(bounds_upper)
     return return_vals if len(return_vals) > 1 else return_vals[0]
 
-def plot_predict_vs_ground(preds, filename):
+def plot_predict_vs_ground(
+    preds,
+    filename,
+    vars_key="2t"
+):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
     step = len(preds) - 1
     pred = preds[step] # use last step
 
-    ax[0].imshow(pred.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    # to fix e.g. "2t" to "t2m" for surf_vars_ds
+    if vars_key not in pred.surf_vars:
+        raise ValueError(f"Variable '{vars_key}' not found in prediction surf_vars. Available keys: {list(pred.surf_vars.keys())}")
+    ds_key = SURF_VARS_DS_KEYS_MAP.get(vars_key, vars_key)
+
+    data = pred.surf_vars[vars_key][0, 0].numpy() - 273.15
+    gt = surf_vars_ds[ds_key][2 + step].values - 273.15
+
+    vmin = min(data.min(), gt.min())
+    vmax = max(data.max(), gt.max())
+
+    ax[0].imshow(data, vmin=vmin, vmax=vmax)
     ax[0].set_ylabel(str(pred.metadata.time[0]))
     ax[0].set_title("Aurora Prediction")
     ax[0].set_xticks([])
     ax[0].set_yticks([])
 
-    ax[1].imshow(surf_vars_ds["t2m"][2 + step].values - 273.15, vmin=-50, vmax=50)
+    ax[1].imshow(gt, vmin=vmin, vmax=vmax)
     ax[1].set_title("ERA5")
     ax[1].set_xticks([])
     ax[1].set_yticks([])
@@ -139,34 +160,12 @@ def plot_predict_vs_ground(preds, filename):
     plt.savefig(f"{filename}.pdf", dpi=300)
     plt.savefig(f"{filename}.png", dpi=300)
 
-def plot_predict_vs_ground(preds, filename):
-    print("Plotting graph: {}".format(filename))
-    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
-
-    step = len(preds) - 1
-    pred = preds[step] # use last step
-
-    ax[0].imshow(pred.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
-    ax[0].set_ylabel(str(pred.metadata.time[0]))
-    ax[0].set_title("Aurora Prediction")
-    ax[0].set_xticks([])
-    ax[0].set_yticks([])
-
-    ax[1].imshow(surf_vars_ds["t2m"][2 + step].values - 273.15, vmin=-50, vmax=50)
-    ax[1].set_title("ERA5")
-    ax[1].set_xticks([])
-    ax[1].set_yticks([])
-
-    plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
-
-
-def plot_std_dev_comparison(std_devs_dawn: list, std_devs_bask: list, filename):
+def plot_std_dev_comparison(
+    std_devs_dawn: list,
+    std_devs_bask: list,
+    filename,
+    vars_key="2t"
+):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -174,13 +173,24 @@ def plot_std_dev_comparison(std_devs_dawn: list, std_devs_bask: list, filename):
     std_devs_dawn = std_devs_dawn[step]
     std_devs_bask = std_devs_bask[step]
 
-    ax[0].imshow(std_devs_dawn.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    # to fix e.g. "2t" to "t2m" for surf_vars_ds
+    if vars_key not in std_devs_dawn.surf_vars:
+        raise ValueError(f"Variable '{vars_key}' not found in std_devs_dawn surf_vars. Available keys: {list(std_devs_dawn.surf_vars.keys())}")
+
+
+    data_dawn = std_devs_dawn.surf_vars[vars_key][0, 0].numpy()
+    data_bask = std_devs_bask.surf_vars[vars_key][0, 0].numpy()
+
+    vmin = min(data_dawn.min(), data_bask.min())
+    vmax = max(data_dawn.max(), data_bask.max())
+
+    ax[0].imshow(data_dawn, vmin=vmin, vmax=vmax)
     ax[0].set_ylabel(str(std_devs_dawn.metadata.time[0]))
     ax[0].set_title("DAWN Aurora Prediction Std Dev")
     ax[0].set_xticks([])
     ax[0].set_yticks([])
 
-    ax[1].imshow(std_devs_bask.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    ax[1].imshow(data_bask, vmin=vmin, vmax=vmax)
     ax[1].set_ylabel(str(std_devs_bask.metadata.time[0]))
     ax[1].set_title("Baskerville Aurora Prediction Std Dev")
     ax[1].set_xticks([])
@@ -194,14 +204,17 @@ def plot_std_dev_comparison(std_devs_dawn: list, std_devs_bask: list, filename):
     plt.savefig(f"{filename}.pdf", dpi=300)
     plt.savefig(f"{filename}.png", dpi=300)
 
-
 def calculate_rmse(preds0, preds1):
     return np.sqrt(np.mean((preds0 - preds1)**2))
 
 def calculate_difference(vars0, vars1):
     return abs(vars0 - vars1)
 
-def plot_error_comparison(preds_dawn: list, preds_bask: list, filename):
+def plot_error_comparison(
+    preds_dawn: list,
+    preds_bask: list,
+    filename,
+):
     print("Plotting graph: {}".format(filename))
     rmse = []
 
