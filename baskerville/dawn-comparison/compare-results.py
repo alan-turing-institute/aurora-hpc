@@ -36,7 +36,11 @@ def load_data(filename) -> list:
         preds = pickle.load(f)
     return preds
 
-def average_data(preds_list: list, return_std_devs: bool = False):
+def average_data(
+    preds_list: list,
+    return_std_devs: bool = False,
+    return_bounds: bool = False
+):
     """Average data across multiple lists of predictions.
 
     Parameters
@@ -44,14 +48,16 @@ def average_data(preds_list: list, return_std_devs: bool = False):
     preds_list : list
         List of lists of predictions
     return_std_devs : bool, optional
-        Whether to return the standard deviations too, by default False
+        Whether to return the standard deviations, by default False
+    return bounds: bool, optional
+        Whether to return the lower (µ - σ) and upper (µ + σ) bounds of the data, by default False
 
     Returns
     -------
     list
         If `return_std_devs` is False, a list of averaged predictions where each item is a Batch.
-        If `return_std_devs` is True, a tuple of three lists, the first being the averaged predictions,
-        the second being the upper standard deviations, and the third being the lower standard deviations.
+        If `return_std_devs` is True, also returns the standard deviations as a list of Batches.
+        If `return_bounds` is True, also returns the lower and upper bounds as two lists of Batches.
     """
     print("Averaging data across {} predictions".format(len(preds_list)))
 
@@ -59,8 +65,10 @@ def average_data(preds_list: list, return_std_devs: bool = False):
 
     avg_preds = []
     if return_std_devs:
-        std_devs_lower = []
-        std_devs_upper = []
+        std_devs = []
+    if return_bounds:
+        bounds_lower = []
+        bounds_upper = []
 
     for step in range(nsteps):
         # Use batch_collate_fn to combine the predictions for this step
@@ -68,36 +76,48 @@ def average_data(preds_list: list, return_std_devs: bool = False):
             [preds[step] for preds in preds_list],
         )
         if return_std_devs:
-            std_dev_lower_batch = avg_batch
-            std_dev_upper_batch = avg_batch
+            std_dev = avg_batch
+        if return_bounds:
+            bounds_lower_batch = avg_batch
+            bounds_upper_batch = avg_batch
         # surface vars
         for k, v in avg_batch.surf_vars.items():
             avg_batch.surf_vars[k] = v.mean(dim=0, keepdim=True)
             if return_std_devs:
-                std_dev_lower_batch.surf_vars[k] = avg_batch.surf_vars[k] + v.std(dim=0, keepdim=True)
-                std_dev_upper_batch.surf_vars[k] = avg_batch.surf_vars[k] - v.std(dim=0, keepdim=True)
+                std_dev.surf_vars[k] = v.std(dim=0, keepdim=True)
+            if return_bounds:
+                bounds_lower_batch.surf_vars[k] = avg_batch.surf_vars[k] + v.std(dim=0, keepdim=True)
+                bounds_upper_batch.surf_vars[k] = avg_batch.surf_vars[k] - v.std(dim=0, keepdim=True)
         # atmos vars
         for k, v in avg_batch.atmos_vars.items():
             avg_batch.atmos_vars[k] = v.mean(dim=0, keepdim=True)
             if return_std_devs:
-                std_dev_lower_batch.atmos_vars[k] = avg_batch.atmos_vars[k] + v.std(dim=0, keepdim=True)
-                std_dev_upper_batch.atmos_vars[k] = avg_batch.atmos_vars[k] - v.std(dim=0, keepdim=True)
+                std_dev.atmos_vars[k] = v.std(dim=0, keepdim=True)
+            if return_bounds:
+                bounds_lower_batch.atmos_vars[k] = avg_batch.atmos_vars[k] + v.std(dim=0, keepdim=True)
+                bounds_upper_batch.atmos_vars[k] = avg_batch.atmos_vars[k] - v.std(dim=0, keepdim=True)
 
         # static vars can be ignored as they are constant
         # append the averaged batch to the list
         avg_preds.append(avg_batch)
         if return_std_devs:
-            std_devs_lower.append(std_dev_lower_batch)
-            std_devs_upper.append(std_dev_upper_batch)
+            std_devs.append(std_dev)
+        if return_bounds:
+            bounds_lower.append(bounds_lower_batch)
+            bounds_upper.append(bounds_upper_batch)
+    return_vals = [avg_preds]
     if return_std_devs:
-        return avg_preds, std_devs_lower, std_devs_upper
-    return avg_preds
+        return_vals.append(std_devs)
+    if return_bounds:
+        return_vals.append(bounds_lower)
+        return_vals.append(bounds_upper)
+    return return_vals if len(return_vals) > 1 else return_vals[0]
 
 def plot_predict_vs_ground(preds, filename):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
-    step = len(preds)
+    step = len(preds) - 1
     pred = preds[step] # use last step
 
     ax[0].imshow(pred.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
@@ -119,6 +139,62 @@ def plot_predict_vs_ground(preds, filename):
     plt.savefig(f"{filename}.pdf", dpi=300)
     plt.savefig(f"{filename}.png", dpi=300)
 
+def plot_predict_vs_ground(preds, filename):
+    print("Plotting graph: {}".format(filename))
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+
+    step = len(preds) - 1
+    pred = preds[step] # use last step
+
+    ax[0].imshow(pred.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    ax[0].set_ylabel(str(pred.metadata.time[0]))
+    ax[0].set_title("Aurora Prediction")
+    ax[0].set_xticks([])
+    ax[0].set_yticks([])
+
+    ax[1].imshow(surf_vars_ds["t2m"][2 + step].values - 273.15, vmin=-50, vmax=50)
+    ax[1].set_title("ERA5")
+    ax[1].set_xticks([])
+    ax[1].set_yticks([])
+
+    plt.tight_layout()
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
+
+
+def plot_std_dev_comparison(std_devs_dawn: list, std_devs_bask: list, filename):
+    print("Plotting graph: {}".format(filename))
+    fig, ax = plt.subplots(1, 2, figsize=(12, 4))
+
+    step = min(len(std_devs_dawn), len(std_devs_bask)) - 1 # use last step
+    std_devs_dawn = std_devs_dawn[step]
+    std_devs_bask = std_devs_bask[step]
+
+    ax[0].imshow(std_devs_dawn.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    ax[0].set_ylabel(str(std_devs_dawn.metadata.time[0]))
+    ax[0].set_title("DAWN Aurora Prediction Std Dev")
+    ax[0].set_xticks([])
+    ax[0].set_yticks([])
+
+    ax[1].imshow(std_devs_bask.surf_vars["2t"][0, 0].numpy() - 273.15, vmin=-50, vmax=50)
+    ax[1].set_ylabel(str(std_devs_bask.metadata.time[0]))
+    ax[1].set_title("Baskerville Aurora Prediction Std Dev")
+    ax[1].set_xticks([])
+    ax[1].set_yticks([])
+
+    plt.tight_layout()
+
+    # Remove file extension from filename if it exists
+    filename = filename.split(".")[0]
+
+    plt.savefig(f"{filename}.pdf", dpi=300)
+    plt.savefig(f"{filename}.png", dpi=300)
+
+
 def calculate_rmse(preds0, preds1):
     return np.sqrt(np.mean((preds0 - preds1)**2))
 
@@ -129,7 +205,7 @@ def plot_error_comparison(preds_dawn: list, preds_bask: list, filename):
     print("Plotting graph: {}".format(filename))
     rmse = []
 
-    steps = min(len(preds_dawn), len(preds_bask)) # should both be the same
+    steps = min(len(preds_dawn), len(preds_bask)) - 1 # should both be the same
     vmin = 0
     vmax = 5
 
@@ -161,7 +237,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
 
-    step = min(len(preds_dawn), len(preds_bask)) # use last step
+    step = min(len(preds_dawn), len(preds_bask)) - 1 # use last step
     vmin = 0
     #vmax = 5
 
@@ -498,7 +574,7 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
 
 if __name__ == "__main__":
     preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(4)]
-    preds_bask = [load_data(f"preds_{i}-bask.pkl") for i i range(4)]
+    preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(4)]
 
     avg_preds_dawn = average_data(preds_dawn)
     avg_preds_bask = average_data(preds_bask)
@@ -509,3 +585,8 @@ if __name__ == "__main__":
     plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
     plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
     plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
+
+    avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
+    avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
+
+    plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
