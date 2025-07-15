@@ -4,12 +4,29 @@ This directory contains useful utilities for performing a comparison between DAW
 
 ## Set up
 
-In order to generate the graphs, you must first ensure the DAWN results are copied into this directory, with the following filename:
+### Dawn results
+
+In order to generate the graphs, you must first ensure the DAWN results are copied into this directory.
+You should have 4 files (i=0 to i=3) with the following filenames:
 ```
-preds-dawn.pkl
+preds_{i}-dawn.pkl
 ```
 
-When you run the tool, an equivalent `preds-bask.pkl` file will be created containing the Baskerville results.
+### Baskerville results
+
+To generate the Baskerville results, run the `inference-timing.py` script using the `batch-inference-timing.sh` batch script:
+```bash
+sbatch batch-inference-timing.sh
+```
+
+This will create 4 files in the current directory with the following filenames:
+```preds_{i}.pkl
+```
+
+You should rename them to:
+```
+preds_{i}-bask.pkl
+```
 
 ## Generating results and graphs
 
