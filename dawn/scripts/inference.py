@@ -1,6 +1,7 @@
 """Do a rollout with Aurora to predict the weather."""
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -15,17 +16,38 @@ from aurora_hpc.dataset import AuroraDataset
 
 
 def main(
-    download_path: str, nsteps: int, save: bool = False, output_file: str = "preds.pkl"
+    download_path: str,
+    nsteps: int,
+    start_index: int = 1,
+    save: bool = False,
+    output_file: str = "preds.pkl",
+    **kwargs,
 ):
+    """Run inference on the Aurora model for a specified number of steps.
+
+    Parameters
+    ----------
+    download_path : str
+        Path to the directory containing the downloaded data.
+    nsteps : int
+        Number of steps to infer ahead.
+    start_index : int, optional
+        Index to start the rollout from, by default 1
+    save : bool, optional
+        Whether to save outputs, by default False
+    output_file : str, optional
+        Output file name if saving outputs, by default "preds.pkl"
+    kwargs : dict
+        kwargs to pass to the AuroraDataset constructor (e.g. if you want to add filepaths)
+    """
     time_start_total = time.time()
 
     print("Loading data...", flush=True)
     dataset = AuroraDataset(
-        data_path=download_path,
-        t=1,
+        data_path=download_path, t=1, **kwargs
     )  # Defaults to the 2023-01-01 dataset
     print("Getting input batch...", flush=True)
-    batch = dataset[0][0]  # Get the first item in the dataset.
+    batch = dataset[start_index][0]  # Get the first item in the dataset.
 
     from aurora import Aurora, rollout
 
@@ -90,11 +112,25 @@ if __name__ == "__main__":
         help="name of file to save outputs (should be a .pkl)",
         default="preds.pkl",
     )
+    parser.add_argument(
+        "--start_index",
+        "-i",
+        type=int,
+        help="index to start the rollout from",
+    )
+    parser.add_argument(
+        "--kwargs",
+        type=json.loads,
+        help="additional keyword arguments to pass to the AuroraDataset constructor (e.g. filepaths)",
+        default="{}",
+    )
     args = parser.parse_args()
 
     main(
         args.download_path,
         nsteps=args.nsteps,
+        start_index=args.start_index,
         save=args.save,
         output_file=args.output_file,
+        **args.kwargs,
     )
