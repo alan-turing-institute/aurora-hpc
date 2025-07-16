@@ -39,25 +39,25 @@ def main(
     """
     time_start_total = time.time()
 
-    print("Loading data...")
+    print("Loading data...", flush=True)
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
         **kwargs
     )  # Defaults to the 2023-01-01 dataset, use kwargs to specify other files.
-    print("Getting input batch...")
+    print("Getting input batch...", flush=True)
     batch = dataset[start_index][0]  # Get the first item in the dataset.
 
     from aurora import Aurora, rollout
 
-    print("loading model")
+    print("loading model", flush=True)
     model = Aurora(use_lora=False)  # The pretrained version does not use LoRA.
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 
     model.eval()
     model = model.to("cuda")
 
-    print("doing rollout")
+    print("doing rollout", flush=True)
     preds = []
     times = []
 
@@ -66,18 +66,18 @@ def main(
         for pred in rollout(model, batch, steps=nsteps):
             preds.append(pred.to("cpu"))
             time_end = time.time()
-            print(f"Time for one step: {time_end - time_start}")
+            print(f"Time for one step: {time_end - time_start}", flush=True)
             times.append(time_end - time_start)
             time_start = time.time()
 
     avg_time = sum(times[1:]) / len(times[1:])  # Exclude the first step time
-    print(f"Average time for last {nsteps - 1} steps: {avg_time}")
-    print(f"Total time for {nsteps} steps: {sum(times)}")
+    print(f"Average time for last {nsteps - 1} steps: {avg_time}", flush=True)
+    print(f"Total time for {nsteps} steps: {sum(times)}", flush=True)
 
     import pickle
 
     time_end_total = time.time()
-    print(f"Total time: {time_end_total - time_start_total}")
+    print(f"Total time: {time_end_total - time_start_total}", flush=True)
 
     if save:
         print(f"Saving predictions to {output_file}")
