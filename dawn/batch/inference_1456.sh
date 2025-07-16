@@ -2,7 +2,7 @@
 #SBATCH --job-name=inference
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
-#SBATCH --gres=gpu:4 # Number of requested GPUs per node
+#SBATCH --gres=gpu:1 # Number of requested GPUs per node
 #SBATCH -N 1 # 1 node
 #SBATCH --time 4:00:00 # HH:MM:SS
 
@@ -18,9 +18,6 @@ export ZE_FLAT_DEVICE_HIERARCHY=FLAT
 
 cd ../scripts/
 
-# run on each GPU
-for i in {0..3}; do
-  ZE_AFFINITY_MASK=$i python inference.py --d ../era5/era_v_inf/ -n 28 --save -o preds_$i.pkl > inference_28_steps_$i.txt &
-done
-
-wait
+# 6h timestep -> 4 steps/day -> 365*4 = 1460 steps/year
+# removing 1 day (4 steps) so to allow for day 1 and day 365.
+python inference.py -d ../era5/era_v_inf/ -n 1456 --save
