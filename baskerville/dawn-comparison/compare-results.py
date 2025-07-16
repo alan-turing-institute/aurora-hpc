@@ -36,7 +36,7 @@ atmos_vars_ds = xr.open_dataset(
     download_path / "2023-01-01-08-atmospheric.nc", engine="netcdf4"
 )
 
-def load_data(filename) -> list:
+def load_data(filename):
     print("Loading pickle file: {}".format(filename))
     with open(filename, "rb") as f:
         preds = pickle.load(f)
@@ -239,12 +239,7 @@ def plot_error_comparison(
     ax.set_ylabel("Root Mean Square Error")
 
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
+    plt.savefig(filename, dpi=300)
 
 def plot_errors(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -332,12 +327,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
     #plt.tight_layout()
     #fig.suptitle("Absolute error comparison for two-meter temperature in K ranged (0, 5) at rollout step 28")
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
+    plt.savefig(filename, dpi=300, )
 
 def plot_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -379,6 +369,7 @@ def plot_losses(preds_dawn, preds_bask, filename):
             )
             loss = mae(pred, batch)
             losses.append(loss.item())
+        # [0] for dawn, [1] for baskerville
         loss_list.append(losses)
 
     fig, ax = plt.subplots(figsize=(8,5))
@@ -389,13 +380,7 @@ def plot_losses(preds_dawn, preds_bask, filename):
     ax.legend()
 
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
-
+    plt.savefig(filename, dpi=300)
 
 def plot_losses_with_std_devs(
         avg_preds_dawn: list,
@@ -486,13 +471,7 @@ def plot_losses_with_std_devs(
     ax.legend()
 
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
-
+    plt.savefig(filename, dpi=300)
 
 def plot_var_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -578,28 +557,28 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
     axs[1, 0].set_ylabel("Mean Average Error")
 
     plt.tight_layout()
+    plt.savefig(filename, dpi=300)
 
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
+preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(4)]
+preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(4)]
 
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
+avg_preds_dawn = average_data(preds_dawn)
+avg_preds_bask = average_data(preds_bask)
 
-if __name__ == "__main__":
-    preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(4)]
-    preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(4)]
+plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn.pdf")
+plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask.pdf")
+# plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn.png")
+# plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask.png")
+plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors.pdf")
+# plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors.png")
+plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison.pdf")
+# plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison.png")
+plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses.pdf")
+# plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses.png")
+plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses.pdf")
+# plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses.png")
 
-    avg_preds_dawn = average_data(preds_dawn)
-    avg_preds_bask = average_data(preds_bask)
+avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
+avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
 
-    plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn")
-    plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask")
-    plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors")
-    plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
-    plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
-    plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
-
-    avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
-    avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
-
-    plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
+plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
