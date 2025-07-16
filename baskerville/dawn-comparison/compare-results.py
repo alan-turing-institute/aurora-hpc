@@ -97,11 +97,7 @@ def average_data(
         return_vals.append(std_devs)
     return return_vals if len(return_vals) > 1 else return_vals[0]
 
-def plot_predict_vs_ground(
-    preds,
-    filename,
-    vars_key="2t"
-):
+def plot_predict_vs_ground(preds, filename, vars_key="2t"):
     print("Plotting graph: {}".format(filename))
     fig, ax = plt.subplots(1, 2, figsize=(12, 4))
 
@@ -179,11 +175,7 @@ def calculate_rmse(preds0, preds1):
 def calculate_difference(vars0, vars1):
     return abs(vars0 - vars1)
 
-def plot_error_comparison(
-    preds_dawn: list,
-    preds_bask: list,
-    filename,
-):
+def plot_error_comparison(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
     rmse = []
 
