@@ -45,7 +45,6 @@ def load_data(filename):
 def average_data(
     preds_list: list,
     return_std_devs: bool = False,
-    return_bounds: bool = False
 ):
     """Average data across multiple lists of predictions.
 
@@ -55,15 +54,12 @@ def average_data(
         List of lists of predictions
     return_std_devs : bool, optional
         Whether to return the standard deviations, by default False
-    return bounds: bool, optional
-        Whether to return the lower (µ - σ) and upper (µ + σ) bounds of the data, by default False
 
     Returns
     -------
     list
         If `return_std_devs` is False, a list of averaged predictions where each item is a Batch.
         If `return_std_devs` is True, also returns the standard deviations as a list of Batches.
-        If `return_bounds` is True, also returns the lower and upper bounds as two lists of Batches.
     """
     print("Averaging data across {} predictions".format(len(preds_list)))
 
@@ -72,9 +68,6 @@ def average_data(
     avg_preds = []
     if return_std_devs:
         std_devs = []
-    if return_bounds:
-        bounds_lower = []
-        bounds_upper = []
 
     for step in range(nsteps):
         # Use batch_collate_fn to combine the predictions for this step
@@ -83,40 +76,25 @@ def average_data(
         )
         if return_std_devs:
             std_dev = avg_batch
-        if return_bounds:
-            bounds_lower_batch = avg_batch
-            bounds_upper_batch = avg_batch
         # surface vars
         for k, v in avg_batch.surf_vars.items():
             avg_batch.surf_vars[k] = v.mean(dim=0, keepdim=True)
             if return_std_devs:
                 std_dev.surf_vars[k] = v.std(dim=0, keepdim=True)
-            if return_bounds:
-                bounds_lower_batch.surf_vars[k] = avg_batch.surf_vars[k] + v.std(dim=0, keepdim=True)
-                bounds_upper_batch.surf_vars[k] = avg_batch.surf_vars[k] - v.std(dim=0, keepdim=True)
         # atmos vars
         for k, v in avg_batch.atmos_vars.items():
             avg_batch.atmos_vars[k] = v.mean(dim=0, keepdim=True)
             if return_std_devs:
                 std_dev.atmos_vars[k] = v.std(dim=0, keepdim=True)
-            if return_bounds:
-                bounds_lower_batch.atmos_vars[k] = avg_batch.atmos_vars[k] + v.std(dim=0, keepdim=True)
-                bounds_upper_batch.atmos_vars[k] = avg_batch.atmos_vars[k] - v.std(dim=0, keepdim=True)
 
         # static vars can be ignored as they are constant
         # append the averaged batch to the list
         avg_preds.append(avg_batch)
         if return_std_devs:
             std_devs.append(std_dev)
-        if return_bounds:
-            bounds_lower.append(bounds_lower_batch)
-            bounds_upper.append(bounds_upper_batch)
     return_vals = [avg_preds]
     if return_std_devs:
         return_vals.append(std_devs)
-    if return_bounds:
-        return_vals.append(bounds_lower)
-        return_vals.append(bounds_upper)
     return return_vals if len(return_vals) > 1 else return_vals[0]
 
 def plot_predict_vs_ground(
@@ -135,11 +113,12 @@ def plot_predict_vs_ground(
         raise ValueError(f"Variable '{vars_key}' not found in prediction surf_vars. Available keys: {list(pred.surf_vars.keys())}")
     ds_key = SURF_VARS_DS_KEYS_MAP.get(vars_key, vars_key)
 
-    data = pred.surf_vars[vars_key][0, 0].numpy() - 273.15
-    gt = surf_vars_ds[ds_key][2 + step].values - 273.15
+    data = pred.surf_vars[vars_key][0, 0].numpy()
+    gt = surf_vars_ds[ds_key][2 + step].values
 
     vmin = min(data.min(), gt.min())
     vmax = max(data.max(), gt.max())
+    print(f"vmin: {vmin}, vmax: {vmax}")
 
     ax[0].imshow(data, vmin=vmin, vmax=vmax)
     ax[0].set_ylabel(str(pred.metadata.time[0]))
@@ -153,12 +132,7 @@ def plot_predict_vs_ground(
     ax[1].set_yticks([])
 
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
+    plt.savefig(filename, dpi=300)
 
 def plot_std_dev_comparison(
     std_devs_dawn: list,
@@ -197,12 +171,7 @@ def plot_std_dev_comparison(
     ax[1].set_yticks([])
 
     plt.tight_layout()
-
-    # Remove file extension from filename if it exists
-    filename = filename.split(".")[0]
-
-    plt.savefig(f"{filename}.pdf", dpi=300)
-    plt.savefig(f"{filename}.png", dpi=300)
+    plt.savefig(filename, dpi=300)
 
 def calculate_rmse(preds0, preds1):
     return np.sqrt(np.mean((preds0 - preds1)**2))
@@ -218,9 +187,7 @@ def plot_error_comparison(
     print("Plotting graph: {}".format(filename))
     rmse = []
 
-    steps = min(len(preds_dawn), len(preds_bask)) - 1 # should both be the same
-    vmin = 0
-    vmax = 5
+    steps = min(len(preds_dawn), len(preds_bask)) - 1 # use last step
 
     for step in range(1, steps):
         vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
@@ -382,97 +349,6 @@ def plot_losses(preds_dawn, preds_bask, filename):
     plt.tight_layout()
     plt.savefig(filename, dpi=300)
 
-def plot_losses_with_std_devs(
-        avg_preds_dawn: list,
-        avg_preds_bask: list,
-        std_devs_lower_dawn: list,
-        std_devs_lower_bask: list,
-        std_devs_upper_dawn: list,
-        std_devs_upper_bask: list,
-        filename
-    ):
-    print("Plotting graph: {}".format(filename))
-    loss_list = []
-    loss_lower_list = []
-    loss_upper_list = []
-
-    dawn = (avg_preds_dawn, std_devs_lower_dawn, std_devs_upper_dawn)
-    bask = (avg_preds_bask, std_devs_lower_bask, std_devs_upper_bask)
-
-    for avg_preds, std_devs_lower, std_devs_upper in [dawn, bask]:
-        losses = []
-        losses_lower = []
-        losses_upper = []
-        for i, pred in enumerate(avg_preds):
-            # gt batch
-            batch = Batch(
-                surf_vars={
-                    # First select time points `i` and `i - 1`. Afterwards, `[None]` inserts a
-                    # batch dimension of size one.
-                    "2t": torch.from_numpy(surf_vars_ds["t2m"].values[[i+2]][None]),
-                    "10u": torch.from_numpy(surf_vars_ds["u10"].values[[i+2]][None]),
-                    "10v": torch.from_numpy(surf_vars_ds["v10"].values[[i+2]][None]),
-                    "msl": torch.from_numpy(surf_vars_ds["msl"].values[[i+2]][None]),
-                },
-                static_vars={
-                    # The static variables are constant, so we just get them for the first time.
-                    "z": torch.from_numpy(static_vars_ds["z"].values[0]),
-                    "slt": torch.from_numpy(static_vars_ds["slt"].values[0]),
-                    "lsm": torch.from_numpy(static_vars_ds["lsm"].values[0]),
-                },
-                atmos_vars={
-                    "t": torch.from_numpy(atmos_vars_ds["t"].values[[i+2]][None]),
-                    "u": torch.from_numpy(atmos_vars_ds["u"].values[[i+2]][None]),
-                    "v": torch.from_numpy(atmos_vars_ds["v"].values[[i+2]][None]),
-                    "q": torch.from_numpy(atmos_vars_ds["q"].values[[i+2]][None]),
-                    "z": torch.from_numpy(atmos_vars_ds["z"].values[[i+2]][None]),
-                },
-                metadata=Metadata(
-                    lat=torch.from_numpy(surf_vars_ds.latitude.values),
-                    lon=torch.from_numpy(surf_vars_ds.longitude.values),
-                    # Converting to `datetime64[s]` ensures that the output of `tolist()` gives
-                    # `datetime.datetime`s. Note that this needs to be a tuple of length one:
-                    # one value for every batch element.
-                    time=(surf_vars_ds.valid_time.values.astype("datetime64[s]").tolist()[i],),
-                    atmos_levels=tuple(int(level) for level in atmos_vars_ds.pressure_level.values),
-                ),
-            )
-            loss = mae(pred, batch)
-            loss_lower = mae(std_devs_lower[i], batch)
-            loss_upper = mae(std_devs_upper[i], batch)
-
-            losses.append(loss.item())
-            losses_lower.append(loss_lower.item())
-            losses_upper.append(loss_upper.item())
-
-        loss_list.append(losses)
-        loss_lower_list.append(losses_lower)
-        loss_upper_list.append(losses_upper)
-
-    fig, ax = plt.subplots(figsize=(8,5))
-    ax.plot(loss_list[0], linestyle="", marker="x", label="DAWN")
-    ax.plot(loss_list[1], linestyle="", marker="+", label="Baskerville")
-    ax.fill_between(
-        range(len(loss_list[0])),
-        loss_lower_list[0],
-        loss_upper_list[0],
-        alpha=0.3,
-        label="DAWN Std Devs"
-    )
-    ax.fill_between(
-        range(len(loss_list[1])),
-        loss_lower_list[1],
-        loss_upper_list[1],
-        alpha=0.3,
-        label="Baskerville Std Devs"
-    )
-    ax.set_xlabel("Rollout step")
-    ax.set_ylabel("Mean Average Error")
-    ax.legend()
-
-    plt.tight_layout()
-    plt.savefig(filename, dpi=300)
-
 def plot_var_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
     surf_losses_list = []
@@ -581,4 +457,4 @@ plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses.pdf")
 avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
 avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
 
-plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
+plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison.pdf")
