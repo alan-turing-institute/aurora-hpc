@@ -7,7 +7,7 @@ This directory contains useful utilities for performing a comparison between DAW
 ### Dawn results
 
 In order to generate the graphs, you must first ensure the DAWN results are copied into this directory.
-You should have 4 files (i=0 to i=3) with the following filenames:
+You should have 4 files with the following filenames:
 ```
 preds_{i}-dawn.pkl
 ```
