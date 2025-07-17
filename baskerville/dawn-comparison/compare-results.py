@@ -25,15 +25,15 @@ SURF_VARS_DS_KEYS_MAP = {
 
 print("Loading dataset")
 # Data will be downloaded here.
-download_path = Path("../era5-experiments/downloads")
+download_path = Path("../../dawn/era5/era_v_inf/")
 download_path = download_path.expanduser()
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
 surf_vars_ds = xr.open_dataset(
-    download_path / "2023-01-01-08-surface-level.nc", engine="netcdf4"
+    download_path / "2023-01-surface-level.nc", engine="netcdf4"
 )
 atmos_vars_ds = xr.open_dataset(
-    download_path / "2023-01-01-08-atmospheric.nc", engine="netcdf4"
+    download_path / "2023-01-atmospheric.nc", engine="netcdf4"
 )
 
 def load_data(filename):
@@ -206,7 +206,6 @@ def plot_errors(preds_dawn, preds_bask, filename):
 
     step = min(len(preds_dawn), len(preds_bask)) - 1 # use last step
     vmin = 0
-    #vmax = 5
 
     vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
     vars_preds_bask = preds_bask[step].surf_vars["2t"][0, 0].numpy()
@@ -252,7 +251,14 @@ def plot_errors(preds_dawn, preds_bask, filename):
     )
     print("RMSE DAWN vs. Baskerville on Actual (step {}): {}".format(step, rmse_dawn_bask_actual))
 
-    img = ax[0, 0].imshow(diff_pred_actual_dawn, vmin=vmin)
+    vmax = max(
+        diff_pred_actual_dawn.max(),
+        diff_pred_actual_bask.max(),
+        diff_dawn_bask_pred.max(),
+        diff_dawn_bask_actual.max(),
+    )
+
+    img = ax[0, 0].imshow(diff_pred_actual_dawn, vmin=vmin, vmax=vmax)
     ax[0, 0].set_ylabel(str(preds_dawn[step].metadata.time[0]))
     ax[0, 0].set_xlabel("RMSE: {:1.5f}".format(rmse_pred_actual_dawn))
     ax[0, 0].set_title("Error on DAWN")
@@ -260,14 +266,14 @@ def plot_errors(preds_dawn, preds_bask, filename):
     ax[0, 0].set_yticks([])
     c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    img = ax[0, 1].imshow(diff_pred_actual_bask, vmin=vmin)
+    img = ax[0, 1].imshow(diff_pred_actual_bask, vmin=vmin, vmax=vmax)
     ax[0, 1].set_title("Error on Baskerville")
     ax[0, 1].set_xlabel("RMSE: {:1.5f}".format(rmse_pred_actual_bask))
     ax[0, 1].set_xticks([])
     ax[0, 1].set_yticks([])
     c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    img = ax[1, 0].imshow(diff_dawn_bask_pred, vmin=vmin)
+    img = ax[1, 0].imshow(diff_dawn_bask_pred, vmin=vmin, vmax=vmax)
     ax[1, 0].set_ylabel(str(preds_bask[step].metadata.time[0]))
     ax[1, 0].set_title("DAWN vs. Baskerville on Predictions")
     ax[1, 0].set_xlabel("RMSE: {:1.5f}".format(rmse_dawn_bask_pred))
@@ -275,7 +281,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
     ax[1, 0].set_yticks([])
     c_bar = plt.colorbar(img, orientation="vertical", pad=0.05, shrink=0.73)
 
-    img = ax[1, 1].imshow(diff_dawn_bask_actual, vmin=vmin)
+    img = ax[1, 1].imshow(diff_dawn_bask_actual, vmin=vmin, vmax=vmax)
     ax[1, 1].set_title("DAWN vs. Baskerville on Actual")
     ax[1, 1].set_xlabel("RMSE: {:1.5f}".format(rmse_dawn_bask_actual))
     ax[1, 1].set_xticks([])
