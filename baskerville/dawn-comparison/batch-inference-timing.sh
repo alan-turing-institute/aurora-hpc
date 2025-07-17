@@ -2,12 +2,12 @@
 # vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
-#SBATCH --time 0:10:0
+#SBATCH --time 0:30:0
 #SBATCH --nodes 1
 #SBATCH --gpus 4
 #SBATCH --cpus-per-gpu 36
 #SBATCH --constraint=a100_80
-#SBATCH --job-name auroria-comparison
+#SBATCH --job-name aurora-comparison
 #SBATCH --output log-inference-timing.txt
 
 # Execute using:
@@ -51,6 +51,7 @@ echo "## Running model"
 nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
 vmstat -t 1 -y > log-comparison-cpu.txt &
 
+export HF_HOME=/bask/projects/u/usjs9456-ati-test/rwood/
 # Perform the prediction
 # do this 4 times, once per GPU
 for i in {0..3}; do

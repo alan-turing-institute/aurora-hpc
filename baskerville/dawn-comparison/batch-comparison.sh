@@ -2,11 +2,11 @@
 # vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
-#SBATCH --time 0:10:0
+#SBATCH --time 0:30:00
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
-#SBATCH --mem 32768
+#SBATCH --mem 76G
 #SBATCH --job-name auroria-comparison
 #SBATCH --output log-comparison.txt
 
@@ -41,7 +41,7 @@ python -m venv venv
 
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
-pip install --quiet -e microsoft-aurora
+pip install --quiet microsoft-aurora
 pip install --quiet -e ../../
 
 echo
@@ -51,6 +51,7 @@ echo "## Running model"
 nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
 vmstat -t 1 -y > log-comparison-cpu.txt &
 
+export HF_HOME=/bask/projects/u/usjs9456-ati-test/rwood/
 # Perform the prediction
 # already done!
 # python inference-timing.py --nsteps 28 --save --output_file preds-bask.pkl
