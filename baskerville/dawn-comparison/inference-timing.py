@@ -116,7 +116,7 @@ if __name__ == "__main__":
         "-i",
         type=int,
         help="index to start the rollout from",
-        default=1,
+        default=0,
     )
     parser.add_argument(
         "--kwargs",
