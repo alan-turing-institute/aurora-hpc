@@ -27,10 +27,10 @@ pushd ../scripts
 #source ../../dawn/environments/venv_3_11_9/bin/activate
 
 # Merge tiles into full devices, for extra memory.
-#echo "Setting FLAT"
-#export ZE_FLAT_DEVICE_HIERARCHY=FLAT
-echo "Setting COMPOSITE"
-export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
+echo "Setting FLAT"
+export ZE_FLAT_DEVICE_HIERARCHY=FLAT
+#echo "Setting COMPOSITE"
+#export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
 
 # Avoid too many open file handles error.
 ulimit -n 1000000

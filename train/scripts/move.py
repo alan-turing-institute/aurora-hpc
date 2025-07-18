@@ -1,12 +1,23 @@
 """Fine tune Aurora weather model."""
 
+from datetime import datetime
+import time
 print("importing...", flush=True)
 import argparse
 import os
 import re
-import time
 import warnings
 from pathlib import Path
+
+import warnings
+import traceback
+
+def custom_warn(message, category, filename, lineno, file=None, line=None):
+    
+    print(datetime.now().replace(microsecond=0), f"\n⚠️ {category.__name__}: {message}")
+    traceback.print_stack(limit=5)
+
+warnings.showwarning = custom_warn
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
@@ -52,7 +63,7 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
     time_start_total = time.time()
 
     device = f"{device_type}"
-    print(f"Using {device=}", flush=True)
+    print(datetime.now().replace(microsecond=0), f"Using {device=}", flush=True)
 
     AuroraI = partial(
             Aurora,
@@ -66,7 +77,7 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
             )
     #AuroraII =     #for constructor in [Aurora, AuroraSmall]: #, AuroraI, AuroraII]
     for i in range(5,30):
-        print("loading model...", i, flush=True)
+        print(datetime.now().replace(microsecond=0), "loading model...", i, flush=True)
         constructor = partial(
             Aurora,
             encoder_depths=(i, i, i),
@@ -92,7 +103,7 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
         for buffer in model.buffers():
             buffer_size += buffer.nelement() * buffer.element_size()
         size_all_mb = (param_size + buffer_size) / 1024**2
-        print('model size after: {:.3f}MB'.format(size_all_mb))
+        print(datetime.now().replace(microsecond=0), 'model size after: {:.3f}MB'.format(size_all_mb))
 
         if not xpu:
             torch.cuda.set_device(LOCAL_RANK)
@@ -101,7 +112,7 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
 
         download_path = Path(download_path)
 
-        print("preparing model...", flush=True)
+        print(datetime.now().replace(microsecond=0), "preparing model...", flush=True)
         model.configure_activation_checkpointing()
         model = model.to(device)
         model.train()
@@ -110,11 +121,11 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
         optimizer = torch.optim.AdamW(model.parameters())
 
         if xpu and xpu_optimize:
-            print("calling ipex.optimize...", flush=True)
+            print(datetime.now().replace(microsecond=0), "calling ipex.optimize...", flush=True)
             model, optimizer = ipex.optimize(model, optimizer=optimizer)
 
 
-        print("loading data...", flush=True)
+        print(datetime.now().replace(microsecond=0), "loading data...", flush=True)
         dataset = AuroraDataset(
             data_path=download_path,
             t=1,
@@ -145,33 +156,33 @@ def main(download_path: str, xpu: bool = False, xpu_optimize=False):
                 pred = pred.to(device)
 
                 # mean absolute error of one variable
-                print("calculating loss...", flush=True)
+                print(datetime.now().replace(microsecond=0), "calculating loss...", flush=True)
 
                 # Todo: Are pred's of type PyTree and does it matter?
                 loss = mae(pred, y)
 
             #if batch > 4:
             #elif batch > 2:
-            print("performing backward pass...", flush=True)
+            print(datetime.now().replace(microsecond=0), "performing backward pass...", flush=True)
             starter = time.perf_counter()
             loss.backward()
-            print("synchronizing")
+            print(datetime.now().replace(microsecond=0), "synchronizing")
             torch.xpu.synchronize()
-            print("sync and backprop took", time.perf_counter() - starter)
+            print(datetime.now().replace(microsecond=0), "sync and backprop took", time.perf_counter() - starter)
             break
 
 
-            print(f"batch {batch}...", flush=True)
+            print(datetime.now().replace(microsecond=0), f"batch {batch}...", flush=True)
 
             time_end = time.time()
             times.append(time_end - time_start)
-            print("batch took:", time_end - time_start, flush=True)
+            print(datetime.now().replace(microsecond=0), "batch took:", time_end - time_start, flush=True)
             time_start = time.time()
 
             time_end_total = time.time()
-            print(f"Total time: {time_end_total - time_start_total}", flush=True)
+            print(datetime.now().replace(microsecond=0), f"Total time: {time_end_total - time_start_total}", flush=True)
 
-    print("done", flush=True)
+    print(datetime.now().replace(microsecond=0), "done", flush=True)
 
 
 main(args.download_path, xpu=args.xpu, xpu_optimize=args.xpu_optimize)
