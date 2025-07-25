@@ -56,8 +56,7 @@ class TestXpuMetrics(unittest.TestCase):
         with patch(
             "utils.which",
             autospec=True,
-        ) as mock_which:
-            mock_which = self.which
+        ):
             self.assertTrue(utils.XpuMetrics.are_available())
 
     def test_get_metrics(self):

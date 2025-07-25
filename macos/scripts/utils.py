@@ -1,3 +1,4 @@
+import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 from shutil import which
@@ -21,32 +22,35 @@ class XpuMetrics(UsageMetrics):
     """Note that we expect metrics to be streaming to a file already."""
 
     def __init__(self, *args, metrics_file: Path = Path("xpu_metrics.txt"), **kwargs):
+        """Will raise if the file does not exist."""
         super().__init__(*args, **kwargs)
         self.metrics_file = metrics_file
-        self.first_line = None
         if self.metrics_file.exists():
             with self.metrics_file.open("r", encoding="utf-8") as f:
-                first_line = f.readline().strip()
-            # if not first_line:
-            #     raise ValueError(f"Metrics file {self.metrics_file} is empty.")
-            self.first_line = first_line
+                self.first_line = f.readline().strip()
 
     @classmethod
     def are_available(cls) -> bool:
         """Check whether XPU is available."""
         return which("xpu-smi") is not None
 
+    def get_last_line(self) -> str:
+        """Get the last line of the metrics file."""
+        with self.metrics_file.open("rb") as f:
+            # Move to the end of the file
+            f.seek(os.SEEK_END)
+
+            # Read backwards until we find a newline
+            while f.read(1) != b"\n":
+                f.seek(-2, os.SEEK_CUR)
+
+            # Read forward to get the last line
+            return f.readline().decode("utf-8").strip()
+
     def get_metrics(self) -> dict[str, Any]:
         """Get XPU metrics."""
         # Get the first and last lines of xpu_metrics.txt
-        with self.metrics_file.open("r", encoding="utf-8") as f:
-            first_line = None
-            for line in f:
-                if first_line is None:
-                    first_line = line.strip()
-                else:
-                    last_line = line.strip()
-        return {first_line: last_line}
+        return {self.first_line: self.get_last_line()}
 
 
 class CudaMetrics(UsageMetrics):
