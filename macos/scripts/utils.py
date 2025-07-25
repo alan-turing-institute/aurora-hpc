@@ -8,13 +8,13 @@ import torch
 
 
 class UsageMetrics(ABC):
-    @classmethod
     @abstractmethod
-    def get_metrics(cls) -> dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         """Get device metrics."""
 
+    @classmethod
     @abstractmethod
-    def are_available(self) -> bool:
+    def are_available(cls) -> bool:
         """Whether metrics are available."""
 
 
@@ -67,11 +67,11 @@ class CudaMetrics(UsageMetrics):
 
 class CpuMetrics(UsageMetrics):
     @classmethod
-    def are_available(self) -> bool:
+    def are_available(cls) -> bool:
         """CPU metrics are always available."""
         return True
 
-    def get_metrics(cls) -> dict[str, Any]:
+    def get_metrics(self) -> dict[str, Any]:
         # todo
         return {
             "cpu_util": 50,  # Placeholder value
