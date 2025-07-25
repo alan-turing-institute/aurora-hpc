@@ -1,47 +1,40 @@
-"""Test out Weights and Biases.
-
-Remember to set `WANDB_DIR=wandb_logs`
-to avoid having a local dir called "wandb".
-"""
-import queue
-import random
-import threading
+import multiprocessing as mp
 import time
 
 import wandb
-from pynvml import *
-
-q = queue.Queue()
 
 
-def gpu_monitor():
-    nvmlInit()
+def gpu_monitor(queue):
     while True:
+        gpu_util = get_fake_gpu_util()  # Replace with nvidia-smi or pynvml
         ts = time.time()
-        #gpu_util = random.randint(0, 100)  # Simulate GPU utilization
-
-        #nvmlSystemGetCudaDriverVersion()
-        #nvmlDeviceGetCount()
-
-        handle = nvmlDeviceGetHandleByIndex(0)
-        gpu_util = nvmlDeviceGetUtilizationRates(handle).gpu
-        q.put({"gpu_util": gpu_util, "timestamp": ts})
-        time.sleep(1)
+        queue.put({"gpu_util": gpu_util, "timestamp": ts})
+        time.sleep(5)
 
 
-def main_loop():
+def main():
     wandb.init(project="your_project")
+    queue = mp.Queue()
+
+    proc = mp.Process(target=gpu_monitor, args=(queue,), daemon=True)
+    proc.start()
+
     step = 0
-    for _ in range(10):
-        while not q.empty():
-            data = q.get()
+    while True:
+        while not queue.empty():
+            data = queue.get()
             wandb.log(
                 {"gpu_util": data["gpu_util"], "logged_at": data["timestamp"]},
                 step=step,
             )
             step += 1
-        time.sleep(2)
+        time.sleep(1)
 
 
-threading.Thread(target=gpu_monitor, daemon=True).start()
-main_loop()
+def get_fake_gpu_util():
+    # Replace with actual GPU util query
+    return int(100 * (0.5 + 0.5 * time.time() % 1))
+
+
+if __name__ == "__main__":
+    main()
