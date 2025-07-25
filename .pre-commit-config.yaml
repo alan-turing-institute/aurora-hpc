@@ -23,3 +23,15 @@ repos:
       - id: isort
         name: isort (python)
         exclude: baskerville
+  - repo: https://github.com/pycqa/flake8
+    rev: '7.3.0'
+    hooks:
+      - id: flake8
+        args: ["--config=.flake8"]
+  - repo: local
+    hooks:
+      - id: mypy
+        name: MyPy
+        entry: mypy --install-types --non-interactive --config-file=mypy.ini .
+        language: system
+        pass_filenames: false
