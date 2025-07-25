@@ -1,17 +1,30 @@
+"""Test out Weights and Biases.
+
+Remember to set `WANDB_DIR=wandb_logs`
+to avoid having a local dir called "wandb".
+"""
 import queue
 import random
 import threading
 import time
 
 import wandb
+from pynvml import *
 
 q = queue.Queue()
 
 
 def gpu_monitor():
+    nvmlInit()
     while True:
         ts = time.time()
-        gpu_util = random.randint(0, 100)  # Simulate GPU utilization
+        #gpu_util = random.randint(0, 100)  # Simulate GPU utilization
+
+        #nvmlSystemGetCudaDriverVersion()
+        #nvmlDeviceGetCount()
+
+        handle = nvmlDeviceGetHandleByIndex(0)
+        gpu_util = nvmlDeviceGetUtilizationRates(handle).gpu
         q.put({"gpu_util": gpu_util, "timestamp": ts})
         time.sleep(1)
 
