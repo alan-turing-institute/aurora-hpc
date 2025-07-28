@@ -40,7 +40,7 @@ export CCL_ZE_IPC_EXCHANGE=sockets
 
 echo "## Initialising virtual environment"
 
-python3.12 -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
@@ -51,7 +51,8 @@ pip install --quiet matplotlib
 echo "## Running calculations"
 
 # Perform the calculations
-python calculate.py -a "xpu" -p "XPU " -o "calcs-dawn.csv"
+python calculate.py -a "xpu" -p "XPU " -o "calcs-dawn-xpu.csv"
+python calculate.py -a "cpu" -p "CPU (DAWN) " -o "calcs-dawn-cpu.csv"
 
 echo "## Tidying up"
 

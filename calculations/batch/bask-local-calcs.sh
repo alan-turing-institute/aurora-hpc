@@ -28,14 +28,14 @@ echo "## Initialising virtual environment"
 python3 -m venv venv
 . ./venv/bin/activate
 
-#pip install --quiet --upgrade pip
-#pip install --quiet typing_extensions==4.14.1
+pip install --quiet --upgrade pip
+pip install --quiet typing_extensions==4.14.1
 
 echo "## Running calculations"
 
 # Perform the calculations
-#python calculate.py -a "cuda" -p "CUDA " -o "calcs-bask.csv"
-python calculate.py -a "cuda" -p "CUDA " -i "calcs-dawn.csv" -o "calcs-bask.csv"
+python calculate.py -a "cuda" -p "CUDA " -o "calcs-bask-gpu.csv"
+python calculate.py -a "cpu" -p "CPU (Baskerville) " -o "calcs-bask-cpu.csv"
 
 echo "## Tidying up"
 
