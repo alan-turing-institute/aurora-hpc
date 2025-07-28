@@ -5,20 +5,6 @@ from unittest.mock import patch
 import utils
 
 
-class TestCpuMetrics(unittest.TestCase):
-    def test_metrics_are_available(self):
-        """CPU metrics should always be available."""
-        self.assertTrue(utils.CpuMetrics.are_available())
-
-    def test_get_metrics(self):
-        """CPU metrics should return a dictionary with expected keys."""
-        cpu_metrics = utils.CpuMetrics()
-        metrics = cpu_metrics.get_metrics()
-        self.assertIsInstance(metrics, dict)
-        self.assertIn("cpu_util", metrics)
-        self.assertIn("cpu_temp", metrics)
-
-
 class TestCudaMetrics(unittest.TestCase):
     def test_metrics_are_available(self):
         """CUDA metrics availability depends on the system."""

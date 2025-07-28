@@ -28,6 +28,7 @@ class XpuMetrics(UsageMetrics):
         if self.metrics_file.exists():
             with self.metrics_file.open("r", encoding="utf-8") as f:
                 self.first_line = f.readline().strip()
+        # Todo: parse from CSV into columns
 
     @classmethod
     def are_available(cls) -> bool:
@@ -62,18 +63,4 @@ class CudaMetrics(UsageMetrics):
     def get_metrics(self) -> dict[str, Any]:
         return {
             "gpu_util": torch.cuda.utilization(),
-        }
-
-
-class CpuMetrics(UsageMetrics):
-    @classmethod
-    def are_available(cls) -> bool:
-        """CPU metrics are always available."""
-        return True
-
-    def get_metrics(self) -> dict[str, Any]:
-        # todo
-        return {
-            "cpu_util": 50,  # Placeholder value
-            "cpu_temp": 60,  # Placeholder value
         }
