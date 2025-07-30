@@ -12,7 +12,7 @@ import time
 import wandb
 from pynvml import *
 
-q = queue.Queue()
+q: queue.Queue[list[dict]] = queue.Queue()
 
 
 def gpu_monitor():
@@ -26,7 +26,7 @@ def gpu_monitor():
 
         handle = nvmlDeviceGetHandleByIndex(0)
         gpu_util = nvmlDeviceGetUtilizationRates(handle).gpu
-        q.put({"gpu_util": gpu_util, "timestamp": ts})
+        q.put([{"gpu_util": gpu_util, "timestamp": ts}])
         time.sleep(1)
 
 
@@ -36,10 +36,11 @@ def main_loop():
     for _ in range(10):
         while not q.empty():
             data = q.get()
-            wandb.log(
-                {"gpu_util": data["gpu_util"], "logged_at": data["timestamp"]},
-                step=step,
-            )
+            for item in data:
+                wandb.log(
+                    item,
+                    step=step,
+                )
             step += 1
         time.sleep(2)
 
