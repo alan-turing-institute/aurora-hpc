@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=2x4
-#SBATCH --output=two_nodes_four_gpus.out
+#SBATCH --output=results/two_nodes_four_gpus.out
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
 #SBATCH -c 24  # Number of cores per task

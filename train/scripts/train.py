@@ -141,6 +141,8 @@ def main(download_path: str, xpu: bool = False):
 
     times = []
 
+    n_batches_per_optim = 8/WORLD_SIZE
+
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
         print(f"batch {batch}...")
@@ -164,8 +166,9 @@ def main(download_path: str, xpu: bool = False):
         print("performing backward pass...")
         loss.backward()
 
-        print("optimizing...")
-        optimizer.step()
+        if batch % n_batches_per_optim == 0:
+            print("optimizing...")
+            optimizer.step()
 
         time_end = time.time()
         times.append(time_end - time_start)
