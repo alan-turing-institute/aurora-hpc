@@ -8,7 +8,7 @@ warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
 )
 
-from aurora_hpc.dataset import AuroraDataset
+from aurora_hpc.dataset import AuroraDataset  # noqa: E402
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
@@ -59,7 +59,6 @@ def main(download_path: str, static: str, surface: str, atmos: str):
     print("Surface variables: {}".format(", ".join(input.surf_vars.keys())))
     print("Atmospheric variables: {}".format(", ".join(input.atmos_vars.keys())))
 
-    metadata = input.metadata
     print(
         "Atmospheric levels: {}".format(
             ", ".join([str(level) for level in input.metadata.atmos_levels])
