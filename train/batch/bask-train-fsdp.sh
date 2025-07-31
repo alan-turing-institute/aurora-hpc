@@ -43,6 +43,7 @@ echo "## Configuring environment"
 export PRIMARY_PORT=$((16384 + $RANDOM % 16384))
 export PRIMARY_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export OMP_NUM_THREADS=1
+export PYTHONPATH=${PWD}/../../src/:$PYTHONPATH
 
 echo
 echo "## Initialising virtual environment"

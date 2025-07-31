@@ -27,6 +27,7 @@ module -q load torchvision/0.15.2-foss-2022a-CUDA-11.7.0
 echo "## Configuring environment"
 
 export OMP_NUM_THREADS=1
+export PYTHONPATH=${PWD}/../../src/:$PYTHONPATH
 
 echo "## Initialising virtual environment"
 
