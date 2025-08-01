@@ -24,7 +24,11 @@ module load intel-oneapi-mkl/2025.0.1
 
 pushd ../scripts
 
-source ../../dawn/environments/venv_3_11_9/bin/activate
+python -m venv venv
+. ./venv/bin/activate
+
+pip install --quiet --upgrade pip
+pip install --quiet ../../.[dawn]
 
 # Merge tiles into full devices, for extra memory.
 export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
