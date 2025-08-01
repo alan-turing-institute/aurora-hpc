@@ -10,7 +10,7 @@
 #SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
-#SBATCH --output log-train.txt
+#SBATCH --output results/two_nodes_four_gpus.txt
 
 # Execute using:
 # sbatch ./bask-train-fsdp.sh

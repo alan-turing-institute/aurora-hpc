@@ -3,14 +3,14 @@
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
 #SBATCH --time 0:20:0
-#SBATCH --nodes 2
+#SBATCH --nodes 1
 #SBATCH --ntasks-per-node 1
-#SBATCH --gpus-per-node 2
+#SBATCH --gpus-per-node 1
 #SBATCH --cpus-per-gpu 36
 #SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
-#SBATCH --output log-train.txt
+#SBATCH --output results/one_node_one_gpu.txt
 
 # Execute using:
 # sbatch ./bask-train-fsdp.sh
