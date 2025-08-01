@@ -3,7 +3,7 @@ import pathlib
 import unittest
 from unittest.mock import patch
 
-import utils
+from aurora_hpc.utils import CudaMetrics, DeviceIdError, XpuMetricsV1, XpuMetricsV2
 
 
 class TestCudaMetrics(unittest.TestCase):
@@ -11,11 +11,11 @@ class TestCudaMetrics(unittest.TestCase):
     def test_metrics_are_available(self):
         """CUDA metrics availability depends on the system."""
         with patch("torch.cuda.is_available", autospec=True, return_value=True):
-            self.assertTrue(utils.CudaMetrics.are_available())
+            self.assertTrue(CudaMetrics.are_available())
 
     def test_get_metrics(self):
         """CUDA metrics should return a dictionary with expected keys."""
-        cuda_metrics = utils.CudaMetrics()
+        cuda_metrics = CudaMetrics()
         with patch("torch.cuda.utilization", autospec=True, return_value=75):
             metrics = cuda_metrics.get_metrics()[0]
         self.assertEqual(75, metrics["gpu_util"])
@@ -44,28 +44,28 @@ class TestXpuMetricsV1(unittest.TestCase):
     def test_metrics_are_available(self):
         """XPU metrics availability depends on the system."""
         with patch(
-            "utils.which",
+            "aurora_hpc.utils.which",
             autospec=True,
         ):
-            self.assertTrue(utils.XpuMetricsV1.are_available())
+            self.assertTrue(XpuMetricsV1.are_available())
 
     def test_get_metrics(self):
 
         # 'dump', '--metrics', '0,1', '--device', '-1', '-n', '1'
-        metrics = utils.XpuMetricsV1(metrics_file=self.test_file).get_metrics()
+        metrics = XpuMetricsV1(metrics_file=self.test_file).get_metrics()
         self.assertEqual({"gpu": "0", "tile": "0", "util": "50"}, metrics[0])
         self.assertEqual({"gpu": "0", "tile": "1", "util": "30"}, metrics[1])
 
     def test_get_metrics_invalid_device(self):
 
-        with self.assertRaises(utils.DeviceIdError) as context:
-            utils.XpuMetricsV1(metrics_file=self.test_file).get_last_device_entry(99)
+        with self.assertRaises(DeviceIdError) as context:
+            XpuMetricsV1(metrics_file=self.test_file).get_last_device_entry(99)
         self.assertEqual(
             "Device ID 99 not found in the metrics file.", str(context.exception)
         )
 
     def test_previous_line(self):
-        xpu_metrics = utils.XpuMetricsV1(metrics_file=self.test_file)
+        xpu_metrics = XpuMetricsV1(metrics_file=self.test_file)
         with self.test_file.open("rb") as f:
             f.seek(-1, os.SEEK_END)
             line = xpu_metrics.get_previous_line(f)
@@ -87,7 +87,8 @@ class TestXpuMetricsV2(unittest.TestCase):
     def setUpClass(cls):
         """Set up the test environment."""
         cls.old_path = os.environ["PATH"].split(":")
-        os.environ["PATH"] = ":".join(["xpu_smi_dir/"] + cls.old_path)
+        xpu_smi_dir = pathlib.Path(__file__).parent / "xpu_smi_dir"
+        os.environ["PATH"] = ":".join([str(xpu_smi_dir.absolute())] + cls.old_path)
 
     @classmethod
     def tearDownClass(cls):
@@ -97,13 +98,13 @@ class TestXpuMetricsV2(unittest.TestCase):
     def test_metrics_are_available(self):
         """XPU metrics availability depends on the system."""
         with patch(
-            "utils.which",
+            "aurora_hpc.utils.which",
             autospec=True,
         ):
-            self.assertTrue(utils.XpuMetricsV2.are_available())
+            self.assertTrue(XpuMetricsV2.are_available())
 
     def test_get_metrics(self):
-        metrics = utils.XpuMetricsV2().get_metrics()
+        metrics = XpuMetricsV2().get_metrics()
         reduced_metrics = [
             {
                 k: v
@@ -132,8 +133,8 @@ class TestXpuMetricsV2(unittest.TestCase):
         )
 
     def test_get_metrics_two(self):
-        with patch("utils.run", autospec=True) as mock_run:
-            utils.XpuMetricsV2().get_metrics()
+        with patch("aurora_hpc.utils.run", autospec=True) as mock_run:
+            XpuMetricsV2().get_metrics()
             mock_run.assert_called_once_with(
                 ["xpu-smi", "dump", "--metrics", "0,1", "--device", "-1", "-n", "1"],
                 capture_output=True,
