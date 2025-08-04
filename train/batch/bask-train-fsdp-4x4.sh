@@ -6,10 +6,10 @@
 #SBATCH --nodes 4
 #SBATCH --ntasks-per-node 1
 #SBATCH --gpus-per-node 1
-#SBATCH --mem 0
+#SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
-#SBATCH --output results/four_nodes_one_gpu.txt
+#SBATCH --output results/four_nodes_four_gpus.txt
 
 # Execute using:
 # sbatch ./bask-train-fsdp.sh

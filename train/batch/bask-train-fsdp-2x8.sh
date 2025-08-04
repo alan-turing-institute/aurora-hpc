@@ -6,7 +6,7 @@
 #SBATCH --nodes 2
 #SBATCH --ntasks-per-node 1
 #SBATCH --gpus-per-node 4
-#SBATCH --mem 0
+#SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
 #SBATCH --output results/two_nodes_eight_gpus.txt
