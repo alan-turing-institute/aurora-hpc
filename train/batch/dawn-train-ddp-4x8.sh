@@ -51,7 +51,9 @@ export CCL_ZE_IPC_EXCHANGE=sockets
 
 sycl-ls
 
-mpirun -prepend-rank -n 8 -ppn 2 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+for i in {0..3}; do
+  mpirun -prepend-rank -n 8 -ppn 2 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd

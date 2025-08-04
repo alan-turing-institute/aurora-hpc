@@ -46,7 +46,9 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+for i in {0..3}; do
+  mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd

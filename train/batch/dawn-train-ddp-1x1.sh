@@ -48,7 +48,9 @@ export CCL_ZE_IPC_EXCHANGE=sockets
 
 mpirun -host ${SLURM_JOB_NODELIST} bash -c 'stdbuf -o0 xpu-smi dump --rawdata --device $SLURM_JOB_GPUS -m 0,1,2,21,22 > gpu-${SLURM_JOB_ID}-${OMPI_COMM_WORLD_RANK}.txt' &
 
-mpirun -prepend-rank -n 1 -ppn 1 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+for i in {0..3}; do
+  mpirun -prepend-rank -n 1 -ppn 1 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd
