@@ -6,7 +6,6 @@
 #SBATCH --nodes 2
 #SBATCH --ntasks-per-node 1
 #SBATCH --gpus-per-node 2
-#SBATCH --cpus-per-gpu 36
 #SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
@@ -70,15 +69,17 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-train-gpu.txt &
 vmstat -t 1 -y > log-train-cpu.txt &
 
 # Perform the prediction
-srun bash -c \
-    'python -m torch.distributed.run \
-    --nnodes ${SLURM_JOB_NUM_NODES} \
-    --nproc-per-node ${SLURM_GPUS_PER_NODE} \
-    --master_addr ${PRIMARY_ADDR} \
-    --master_port ${PRIMARY_PORT} \
-    --node_rank ${SLURM_NODEID} \
-    train.py \
-    -d ../../downloads'
+for i in {0..3}; do
+    srun bash -c \
+        'python -m torch.distributed.run \
+        --nnodes ${SLURM_JOB_NUM_NODES} \
+        --nproc-per-node ${SLURM_GPUS_PER_NODE} \
+        --master_addr ${PRIMARY_ADDR} \
+        --master_port ${PRIMARY_PORT} \
+        --node_rank ${SLURM_NODEID} \
+        train.py \
+        -d ../../downloads'
+done
 
 echo
 echo "## Tidying up"
