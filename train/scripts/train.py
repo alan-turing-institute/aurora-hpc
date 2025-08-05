@@ -17,9 +17,16 @@ import torch.nn as nn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
+from aurora.model.swin3d import (
+    Basic3DDecoderLayer,
+    Basic3DEncoderLayer,
+    Swin3DTransformerBackbone,
+    Swin3DTransformerBlock,
+)
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
@@ -103,11 +110,15 @@ def main(download_path: str, xpu: bool = False):
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
     )
-    model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    # model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
     if not xpu:
         torch.cuda.set_device(LOCAL_RANK)
 
     download_path = Path(download_path)
+
+    policy = ModuleWrapPolicy(
+        {Swin3DTransformerBackbone, Basic3DEncoderLayer, Basic3DDecoderLayer}
+    )
 
     print("preparing model...")
     model.configure_activation_checkpointing()
@@ -115,7 +126,9 @@ def main(download_path: str, xpu: bool = False):
         model,
         device_id=LOCAL_RANK,
         use_orig_params=True,
-        sharding_strategy=ShardingStrategy.NO_SHARD,
+        # sharding_strategy=ShardingStrategy.NO_SHARD,
+        sharding_strategy=ShardingStrategy.FULL_SHARD,
+        auto_wrap_policy=policy,
     )
     model.train()
 
@@ -141,7 +154,7 @@ def main(download_path: str, xpu: bool = False):
 
     times = []
 
-    n_batches_per_optim = 8/WORLD_SIZE
+    n_batches_per_optim = 8 / WORLD_SIZE
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
@@ -164,11 +177,14 @@ def main(download_path: str, xpu: bool = False):
             loss = mae(pred, y)
 
         print("performing backward pass...")
+        del y
         loss.backward()
 
         if batch % n_batches_per_optim == 0:
             print("optimizing...")
             optimizer.step()
+            if batch > 0:
+                break
 
         time_end = time.time()
         times.append(time_end - time_start)

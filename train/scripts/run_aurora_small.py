@@ -5,6 +5,7 @@ import os
 import time
 from pathlib import Path
 
+import intel_extension
 import torch
 import torch.nn as nn
 from torch.distributed import destroy_process_group, init_process_group
@@ -16,15 +17,16 @@ from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 os.environ["MASTER_ADDR"] = "0.0.0.0"
 os.environ["MASTER_PORT"] = "29876"
+RANK = int(os.environ["MY_RANK"])
 
 
 def main():
     time_start_total = time.time()
 
     init_process_group(
-        world_size=1,
-        rank=0,
-        backend="gloo",
+        world_size=2,
+        rank=RANK,
+        backend="ccl",
     )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

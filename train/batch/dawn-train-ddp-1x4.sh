@@ -13,22 +13,22 @@
 # For this we don't need to 'skip' any GPUs
 
 #set -o xtrace
-set -o errexit
+#set -o errexit
 
-module purge
-module load default-dawn
-module load lua
+#module purge
+#module load default-dawn
+#module load lua
 module load intel-oneapi-ccl/2021.14.0
 module load intel-oneapi-mpi/2021.14.1
 module load intel-oneapi-mkl/2025.0.1
 
 pushd ../scripts
 
-python -m venv venv
-. ./venv/bin/activate
+#python -m venv venv
+#. ./venv/bin/activate
 
-pip install --quiet --upgrade pip
-pip install --quiet ../../.[dawn]
+#pip install --quiet --upgrade pip
+#pip install --quiet ../../.[dawn]
 
 # Merge tiles into full devices, for extra memory.
 export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
@@ -46,9 +46,6 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-for i in {0..3}; do
-  mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
-done
+mpirun -n 4 -prepend-rank python train.py --xpu -d ../../dawn/era5/era_v_inf/
 
-deactivate
 popd
