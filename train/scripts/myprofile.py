@@ -1,0 +1,196 @@
+"""Fine tune Aurora weather model."""
+
+print("importing...", flush=True)
+import argparse
+import os
+import re
+import time
+import warnings
+from pathlib import Path
+
+warnings.filterwarnings(
+    "ignore", category=UserWarning, message="TypedStorage is deprecated"
+)
+
+from functools import partial
+
+import torch
+import torch.nn as nn
+import torch.profiler
+from torch.distributed import all_gather, destroy_process_group, init_process_group
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+from torch.distributed.fsdp import ShardingStrategy
+from torch.profiler import ProfilerActivity, record_function
+from torch.utils.data import DataLoader, DistributedSampler
+
+from aurora import Aurora, AuroraSmall
+from aurora_hpc.aurora_loss import mae
+from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
+parser.add_argument("--xpu-optimize", action="store_true", help="do ipex.optimize")
+parser.add_argument(
+    "--download_path",
+    "-d",
+    help="path to download directory",
+    default="../../era5/era_v_inf",
+)
+args = parser.parse_args()
+
+if args.xpu:
+    import intel_extension_for_pytorch as ipex
+
+    # unset affinity mask
+    os.environ.pop("ZE_AFFINITY_MASK", None)
+
+hierarchy = os.environ["ZE_FLAT_DEVICE_HIERARCHY"]
+profiler = torch.profiler.profile(
+    activities=[
+        #       torch.profiler.ProfilerActivity.CPU,
+        #       torch.profiler.ProfilerActivity.XPU,  # or .CUDA
+    ],
+    # schedule=torch.profiler.schedule(
+    #    wait=1,
+    #    warmup=1,
+    #    active=2,
+    #    repeat=1
+    # ),
+    # on_trace_ready=torch.profiler.tensorboard_trace_handler(f'./log_dir/{hierarchy}'),
+    record_shapes=True,
+    with_stack=False,
+    profile_memory=True,
+)
+
+
+def main(download_path: str, xpu: bool = False, xpu_optimize=False):
+    if xpu:
+        device_type = "xpu"
+    else:
+        comms_backend = "nccl"
+        device_type = "cuda"
+
+    time_start_total = time.time()
+
+    device = f"{device_type}"
+    print(f"Using {device=}", flush=True)
+
+    for i in [10]:  # profiler needs a little warmup
+        print("loading model...", i, flush=True)
+        constructor = partial(
+            Aurora,
+            encoder_depths=(i, i, i),
+            encoder_num_heads=(4, 8, 16),
+            decoder_depths=(i, i, i),
+            decoder_num_heads=(16, 8, 4),
+            embed_dim=256,
+            num_heads=8,
+        )
+
+        model = constructor(
+            use_lora=False,  # Model was not fine-tuned.
+            autocast=True,  # Use AMP.
+        )
+        # model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+
+        # Some sense of the size. See
+        # https://discuss.pytorch.org/t/finding-model-size/130275
+        param_size = 0
+        for param in model.parameters():
+            param_size += param.nelement() * param.element_size()
+        buffer_size = 0
+        for buffer in model.buffers():
+            buffer_size += buffer.nelement() * buffer.element_size()
+        size_all_mb = (param_size + buffer_size) / 1024**2
+        print("model size after: {:.3f}MB".format(size_all_mb))
+
+        if not xpu:
+            torch.cuda.set_device(LOCAL_RANK)
+        else:
+            torch.xpu.set_device("xpu:0")
+
+        download_path = Path(download_path)
+
+        print("preparing model...", flush=True)
+        model.configure_activation_checkpointing()
+        model = model.to(device)
+        model.train()
+
+        # AdamW, as used in the paper.
+        optimizer = torch.optim.AdamW(model.parameters())
+
+        if xpu and xpu_optimize:
+            print("calling ipex.optimize...", flush=True)
+            model, optimizer = ipex.optimize(model, optimizer=optimizer)
+
+        print("loading data...", flush=True)
+        dataset = AuroraDataset(
+            data_path=download_path,
+            t=1,
+            static_data=Path("static.nc"),
+            surface_data=Path("2023-01-01-surface-level.nc"),
+            atmos_data=Path("2023-01-01-atmospheric.nc"),
+        )
+        data_loader = DataLoader(
+            dataset=dataset,
+            batch_size=1,  # If we set a batch size we'll need a collate_fn
+            shuffle=False,  # We don't need to shuffle.
+            collate_fn=aurora_collate_fn,
+            num_workers=10,
+            pin_memory=True,
+        )
+
+        times = []
+
+        time_start = time.time()
+        with profiler:
+            for batch, (X, y) in enumerate(data_loader):
+                print("Running batch", batch)
+                # X = X.to("xpu")
+                optimizer.zero_grad()
+                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                    y = y.to(device)
+                    pred = model(X)
+
+                    # only one of these is necessary
+                    pred = pred.to(device)
+
+                    # mean absolute error of one variable
+                    print("calculating loss...", flush=True)
+
+                    # Todo: Are pred's of type PyTree and does it matter?
+                    loss = mae(pred, y)
+
+                # if batch > 4:
+                # elif batch > 2:
+                # with record_function("mybackward"):
+                torch.xpu.synchronize()
+                print("performing backward pass...", flush=True)
+                starter = time.perf_counter()
+                loss.backward()
+                print("synchronizing")
+                torch.xpu.synchronize()
+                print("sync and backprop took", time.perf_counter() - starter)
+                # optimizer.step()
+                profiler.step()
+                if batch > 3:
+                    break
+
+            print(f"batch {batch}...", flush=True)
+
+            time_end = time.time()
+            times.append(time_end - time_start)
+            print("batch took:", time_end - time_start, flush=True)
+            time_start = time.time()
+
+            time_end_total = time.time()
+            print(f"Total time: {time_end_total - time_start_total}", flush=True)
+
+    sort_by_keyword = "xpu" + "_time_total"
+    print(
+        profiler.key_averages().table(sort_by=sort_by_keyword, row_limit=10), flush=True
+    )
+    print("done", flush=True)
+
+
+main(args.download_path, xpu=args.xpu, xpu_optimize=args.xpu_optimize)

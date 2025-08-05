@@ -16,11 +16,13 @@ import torch
 import torch.nn as nn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import ShardingStrategy
+from torch.distributed.fsdp import ShardingStrategy, fully_shard
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
+from aurora.model.decoder import Perceiver3DDecoder
+from aurora.model.encoder import Perceiver3DEncoder
 from aurora.model.swin3d import (
     Basic3DDecoderLayer,
     Basic3DEncoderLayer,
@@ -117,7 +119,7 @@ def main(download_path: str, xpu: bool = False):
     download_path = Path(download_path)
 
     policy = ModuleWrapPolicy(
-        {Swin3DTransformerBackbone, Basic3DEncoderLayer, Basic3DDecoderLayer}
+        {Swin3DTransformerBackbone, Perceiver3DEncoder, Perceiver3DDecoder}
     )
 
     print("preparing model...")
@@ -126,10 +128,11 @@ def main(download_path: str, xpu: bool = False):
         model,
         device_id=LOCAL_RANK,
         use_orig_params=True,
-        # sharding_strategy=ShardingStrategy.NO_SHARD,
-        sharding_strategy=ShardingStrategy.FULL_SHARD,
-        auto_wrap_policy=policy,
+        sharding_strategy=ShardingStrategy.NO_SHARD,
+        # sharding_strategy=ShardingStrategy.FULL_SHARD,
+        # auto_wrap_policy=policy,
     )
+    # model = fully_shard(model)
     model.train()
 
     # AdamW, as used in the paper.
@@ -156,11 +159,10 @@ def main(download_path: str, xpu: bool = False):
 
     n_batches_per_optim = 8 / WORLD_SIZE
 
+    optimizer.zero_grad()
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
         print(f"batch {batch}...")
-
-        optimizer.zero_grad()
 
         with torch.autocast(device_type=device_type):
             print("performing forward pass...")
@@ -177,12 +179,14 @@ def main(download_path: str, xpu: bool = False):
             loss = mae(pred, y)
 
         print("performing backward pass...")
-        del y
+
         loss.backward()
 
         if batch % n_batches_per_optim == 0:
             print("optimizing...")
             optimizer.step()
+            optimizer.zero_grad()
+
             if batch > 0:
                 break
 
