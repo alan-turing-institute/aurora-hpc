@@ -2,7 +2,8 @@
 # vim: et:ts=4:sts=4:sw=4
 
 # Execute using:
-# ./bask-local-calcs.sh
+# srun --qos turing --account usjs9456-ati-test --time 1:00:00 --nodes 1 --gpus 1 --cpus-per-gpu 36 --mem 16384 --pty /bin/bash
+# ./bask-srun-calcs.sh
 
 echo "## Aurora calculation testing script starting"
 
@@ -34,18 +35,18 @@ pip install --quiet typing_extensions==4.14.1
 echo "## Plotting graphs"
 
 # Render some graphs - GPU plots
-python plot.py -x "Multiply-and-Add" -o "dev-mad-1024x1024-0042" -i "calcs-dawn-xpu-0042.csv" -i "calcs-bask-gpu-0042.csv"
-python plot.py -x "Multiply-and-Add" -o "dev-mad-1024x1024-0043" -i "calcs-dawn-xpu-0043.csv" -i "calcs-bask-gpu-0043.csv"
+python plot.py -x "Multiply-and-Add" -o "dev-mad-1024x1024-s42" -i "calcs-dawn-xpu-mad-1024x1024-s42.csv" -i "calcs-bask-gpu-mad-1024x1024-s42.csv"
+python plot.py -x "Multiply-and-Add" -o "dev-mad-1024x1024-s43" -i "calcs-dawn-xpu-mad-1024x1024-s43.csv" -i "calcs-bask-gpu-mad-1024x1024-s43.csv"
 python plot.py -x "Fuzzed Multiply-and-Add" -o "dev-mad-fuzz-1024x1024" -i "calcs-dawn-xpu-mad-fuzz-1024x1024.csv" -i "calcs-bask-gpu-mad-fuzz-1024x1024.csv"
-python plot.py -x "Multiply-and-Add" -o "dev-mad-3x3" -i "calcs-dawn-xpu-mad-3x3.csv" -i "calcs-bask-gpu-mad-3x3.csv"
+python plot.py -x "Multiply-and-Add" -o "dev-mad-16x16" -i "calcs-dawn-xpu-mad-16x16.csv" -i "calcs-bask-gpu-mad-16x16.csv"
 python plot.py -x "Multiply" -o "dev-mul-1024x1024" -i "calcs-dawn-xpu-mul-1024x1024.csv" -i "calcs-bask-gpu-mul-1024x1024.csv"
 python plot.py -x "Addition" -o "dev-add-1024x1024" -i "calcs-dawn-xpu-add-1024x1024.csv" -i "calcs-bask-gpu-add-1024x1024.csv"
 
 # Render some graphs - CPU plots
-python plot.py -x "Multiply-and-Add" -o "cpu-mad-1024x1024-0042" -i "calcs-dawn-cpu-0042.csv" -i "calcs-bask-cpu-0042.csv"
-python plot.py -x "Multiply-and-Add" -o "cpu-mad-1024x1024-0043" -i "calcs-dawn-cpu-0043.csv" -i "calcs-bask-cpu-0043.csv"
+python plot.py -x "Multiply-and-Add" -o "cpu-mad-1024x1024-s42" -i "calcs-dawn-cpu-mad-1024x1024-s42.csv" -i "calcs-bask-cpu-mad-1024x1024-s42.csv"
+python plot.py -x "Multiply-and-Add" -o "cpu-mad-1024x1024-s43" -i "calcs-dawn-cpu-mad-1024x1024-s43.csv" -i "calcs-bask-cpu-mad-1024x1024-s43.csv"
 python plot.py -x "Fuzzed Multiply-and-Add" -o "cpu-mad-fuzz-1024x1024" -i "calcs-dawn-cpu-mad-fuzz-1024x1024.csv" -i "calcs-bask-cpu-mad-fuzz-1024x1024.csv"
-python plot.py -x "Multiply-and-Add" -o "cpu-mad-3x3" -i "calcs-dawn-cpu-mad-3x3.csv" -i "calcs-bask-cpu-mad-3x3.csv"
+python plot.py -x "Multiply-and-Add" -o "cpu-mad-16x16" -i "calcs-dawn-cpu-mad-16x16.csv" -i "calcs-bask-cpu-mad-16x16.csv"
 python plot.py -x "Multiply" -o "cpu-mul-1024x1024" -i "calcs-dawn-cpu-mul-1024x1024.csv" -i "calcs-bask-cpu-mul-1024x1024.csv"
 python plot.py -x "Addition" -o "cpu-add-1024x1024" -i "calcs-dawn-cpu-add-1024x1024.csv" -i "calcs-bask-cpu-add-1024x1024.csv"
 

@@ -2,7 +2,8 @@
 # vim: et:ts=4:sts=4:sw=4
 
 # Execute using:
-# ./bask-local-calcs.sh
+# srun --qos turing --account usjs9456-ati-test --time 1:00:00 --nodes 1 --gpus 1 --cpus-per-gpu 36 --mem 16384 --pty /bin/bash
+# ./bask-srun-calcs.sh
 
 echo "## Aurora calculation testing script starting"
 

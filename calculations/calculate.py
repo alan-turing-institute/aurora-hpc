@@ -52,37 +52,51 @@ class Calculations:
         print("Random number generation check end")
         print()
 
-    def get_rand_matrix(self, dtype, scale, offset):
-        """Returns a diagonal matrix of shape (size, size), values between 0.999 and 1.111"""
+    def get_rand_matrix(self, scale, offset):
+        """Return random matrices of shape (size, size) with elements within given ranges.
+
+        Returns two identical matrices, one on the CPU and one on the GPU, cast to the
+        specified type.
+
+        Each matrix is of shape (size, size) containing values chosen uniform at random
+        within the internal [offset, offset + scale).
+
+        One first matrix will be on the CPU, the second will be on the GPU.
+
+        The first matrix will be in float64 format, the second contains the same values cast
+        to the specified format.
+
+        Arguments:
+            scale: the width of the interval to draw random values from.
+            offset: the start of the interval to draw random values from.
+
+        Returns: (result_cpu, result): the same matrices on CPU and GPU respectively.
+        """
         # Perform random generation on the CPU to avoid impacts from discrepancies betweeen GPUs
-        result_cpu = (2.0 * (torch.rand((self.size, self.size), dtype=torch.float64, device="cpu") - 1) * scale) + offset
+        result_cpu = (torch.rand((self.size, self.size), dtype=torch.float64, device="cpu") * scale) + offset
         result_device = result_cpu.detach().clone()
         result_device = result_device.to(self.device)
-        #value = result[0,0].item()
         return result_cpu, result_device
 
-    def matrix_multiple_mad(self, multiplier, accumulator, iterations, dtype, device):
+    def matrix_multiple_mad(self, result, multiplier, accumulator, iterations, dtype, device):
         """Perform matrix multiplication-and-adds at different precisions"""
         multiplier_cast = multiplier.type(dtype)
         accumulator_cast = accumulator.type(dtype)
-        result = torch.eye(self.size, dtype=dtype, device=device)
         for count in range(iterations):
             result = torch.mm(result, multiplier_cast)
             result = torch.add(result, accumulator_cast)
         return result
 
-    def matrix_multiple_mul(self, multiplier, _, iterations, dtype, device):
+    def matrix_multiple_mul(self, result, multiplier, _, iterations, dtype, device):
         """Perform matrix multiplications at different precisions"""
         multiplier_cast = multiplier.type(dtype)
-        result = torch.eye(self.size, dtype=dtype, device=device)
         for count in range(iterations):
             result = torch.mm(result, multiplier_cast)
         return result
 
-    def matrix_multiple_add(self, _, accumulator, iterations, dtype, device):
+    def matrix_multiple_add(self, result, _, accumulator, iterations, dtype, device):
         """Perform matrix multiplication-and-adds at different precisions"""
         accumulator_cast = accumulator.type(dtype)
-        result = torch.zeros(self.size, dtype=dtype, device=device)
         for count in range(iterations):
             result = torch.add(result, accumulator_cast)
         return result
@@ -158,19 +172,28 @@ class Calculations:
         steps_list = []
         self.reset_datalines()
         mse_lists = [[] for _ in range(len(self.precisions))]
+        double_steps = 128
+        scale_add = 1 / (2**20)
+        scale_mul = (2**(1 / double_steps)) / self.size
 
-        multiplier_cpu, multiplier_device = self.get_rand_matrix(torch.float64, 0.1 / self.size, 1.0 / self.size)
-        accumulator_cpu, accumulator_device = self.get_rand_matrix(torch.float64, 0.1, 0.0)
-        for steps in range(16 * self.scalefactor, 513 * self.scalefactor, 16 * self.scalefactor):
-            if fuzz:
-                multiplier_cpu, multiplier_device = self.get_rand_matrix(torch.float64, 0.1 / self.size, 1.0 / self.size)
-                accumulator_cpu, accumulator_device = self.get_rand_matrix(torch.float64, 0.1, 0.0)
-            steps_list.append(steps)
-            result_cpu = matrix_operation(multiplier_cpu, accumulator_cpu, steps, torch.float64, "cpu")
-            for pos, precision in enumerate(self.precisions):
-                result = matrix_operation(multiplier_device, accumulator_device, steps, precision, self.device)
+        multiplier_cpu, multiplier_device = self.get_rand_matrix(0.002 * scale_mul, 0.999 * scale_mul)
+        accumulator_cpu, accumulator_device = self.get_rand_matrix(0.002 * scale_add, 0.999 * scale_add)
+        for pos, precision in enumerate(self.precisions):
+            result_cpu = torch.eye(self.size, dtype=torch.float64, device="cpu")
+            result = torch.eye(self.size, dtype=precision, device=self.device)
+            prev = 0
+            for steps in range(16 * self.scalefactor, 513 * self.scalefactor, 16 * self.scalefactor):
+                if fuzz:
+                    multiplier_cpu, multiplier_device = self.get_rand_matrix(0.002 * scale_mul, 0.999 * scale_mul)
+                    accumulator_cpu, accumulator_device = self.get_rand_matrix(0.002 * scale_add, 0.999 * scale_add)
+                if pos == 0:
+                    steps_list.append(steps)
+                result_cpu = matrix_operation(result_cpu, multiplier_cpu, accumulator_cpu, steps - prev, torch.float64, "cpu")
+                result = matrix_operation(result, multiplier_device, accumulator_device, steps - prev, precision, self.device)
+                value = result_cpu[0,0].item()
                 mse = self.matrix_compare(result_cpu, result.cpu())
                 mse_lists[pos].append(mse.cpu())
+                prev = steps
 
         self.steps = steps_list
         for pos, precision in enumerate(self.precisions):
@@ -207,15 +230,19 @@ def main():
     parser.add_argument("--fileout", "-o", type=str, required=True, help="Filename to output the data to")
     args = parser.parse_args()
 
-    calc = Calculations(3, 10, 42, args.accelerator, args.prefix)
+    calc = Calculations(16, 10, 42, args.accelerator, args.prefix)
     calc.random_check()
 
-    calc = Calculations(3, 10, 42, args.accelerator, args.prefix)
-    fileout = calc.suffix_path(args.fileout, "-mad-3x3")
+    calc = Calculations(16, 1, 42, args.accelerator, args.prefix)
+    fileout = calc.suffix_path(args.fileout, "-mad-16x16")
     calc.generate_data_mad(fileout)
 
     calc = Calculations(1024, 1, 42, args.accelerator, args.prefix)
-    fileout = calc.suffix_path(args.fileout, "-mad-1024x1024")
+    fileout = calc.suffix_path(args.fileout, "-mad-1024x1024-s42")
+    calc.generate_data_mad(fileout)
+
+    calc = Calculations(1024, 1, 43, args.accelerator, args.prefix)
+    fileout = calc.suffix_path(args.fileout, "-mad-1024x1024-s43")
     calc.generate_data_mad(fileout)
 
     calc = Calculations(1024, 1, 42, args.accelerator, args.prefix)
@@ -229,11 +256,6 @@ def main():
     calc = Calculations(1024, 1, 42, args.accelerator, args.prefix)
     fileout = calc.suffix_path(args.fileout, "-mad-fuzz-1024x1024")
     calc.generate_data_mad_fuzz(fileout)
-
-    for seed in range(42, 52):
-        calc = Calculations(1024, 1, seed, args.accelerator, args.prefix)
-        fileout = calc.index_path(args.fileout, seed)
-        calc.generate_data_mad(fileout)
 
 if __name__ == "__main__":
     main()

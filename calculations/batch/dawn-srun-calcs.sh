@@ -2,7 +2,8 @@
 # vim: et:ts=4:sts=4:sw=4
 
 # Execute using:
-# ./dawn-local-calcs.sh
+# srun --account airr-p8-rcpp-dawn-gpu --partition pvc9 --time 1:00:00 --nodes 1 --gres gpu:1 --pty bash
+# ./dawn-srun-calcs.sh
 
 echo "## Aurora calculation testing script starting"
 
