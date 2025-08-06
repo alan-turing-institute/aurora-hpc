@@ -72,7 +72,7 @@ else:
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 
 
-def main(download_path: str, xpu: bool = False):
+def main(xpu: bool = False):
     if xpu:
         comms_backend = "ccl"
         device_type = "xpu"
@@ -257,4 +257,4 @@ def main(download_path: str, xpu: bool = False):
     print("done")
 
 
-main(args.download_path, xpu=args.xpu)
+main(xpu=args.xpu)
