@@ -193,3 +193,8 @@ log-*.txt.stats
 baskerville/dawn-comparison/*.png
 baskerville/dawn-comparison/*.pdf
 baskerville/dawn-comparison/dawn-code
+
+# Logs
+
+logs/
+plots.pdf

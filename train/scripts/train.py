@@ -19,6 +19,7 @@ from dataset import AuroraDataset, aurora_collate_fn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
+from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
@@ -77,6 +78,21 @@ else:
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 
 
+def move_to_device(batch, device):
+    """Recursively move a pytree of tensors to a specified device."""
+    if isinstance(batch, torch.Tensor):
+        return batch.to(device)
+    elif isinstance(batch, (list, tuple)):
+        return type(batch)(move_to_device(v, device) for v in batch)
+    elif isinstance(batch, dict):
+        return {k: move_to_device(v, device) for k, v in batch.items()}
+    elif hasattr(batch, "__dict__"): # For custom objects like 'Batch'
+        for attr, value in batch.__dict__.items():
+            setattr(batch, attr, move_to_device(value, device))
+        return batch
+    else:
+        return batch
+
 def main(download_path: str, xpu: bool = False):
     if xpu:
         comms_backend = "ccl"
@@ -111,12 +127,27 @@ def main(download_path: str, xpu: bool = False):
 
     print("preparing model...")
     model.configure_activation_checkpointing()
-    model = FSDP(
-        model,
-        device_id=LOCAL_RANK,
-        use_orig_params=True,
-        sharding_strategy=ShardingStrategy.NO_SHARD,
-    )
+
+    # --- WITH THIS MANUAL PLACEMENT CODE ---
+    # Forcefully move all parameters and buffers to the correct device
+    print(f"Manually moving model to {device}...")
+    for p in model.parameters():
+        p.data = p.data.to(device)
+        if p.grad is not None:
+            p.grad.data = p.grad.data.to(device)
+    for b in model.buffers():
+        b.data = b.data.to(device)
+    print("Model placement complete.")
+    # -------------------------------------
+
+    # model = FSDP(
+    #     model,
+    #     device_id=LOCAL_RANK,
+    #     use_orig_params=True,
+    #     sharding_strategy=ShardingStrategy.NO_SHARD,
+    # )
+    model = DDP(model, device_ids=[LOCAL_RANK])
+ 
     model.train()
 
     # AdamW, as used in the paper.
@@ -127,8 +158,8 @@ def main(download_path: str, xpu: bool = False):
         data_path=download_path,
         t=1,
         static_filepath=Path("static.nc"),
-        surface_filepath=Path("2023-01-surface-level.nc"),
-        atmos_filepath=Path("2023-01-atmospheric.nc"),
+        surface_filepath=Path("2023-01-01-surface-level.nc"),
+        atmos_filepath=Path("2023-01-01-atmospheric.nc"),
     )
     sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
@@ -144,6 +175,9 @@ def main(download_path: str, xpu: bool = False):
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
         print(f"batch {batch}...")
+        
+        X = move_to_device(X, device)
+        y = move_to_device(y, device)
 
         optimizer.zero_grad()
 
@@ -151,9 +185,17 @@ def main(download_path: str, xpu: bool = False):
             print("performing forward pass...")
             pred = model(X)
 
-            # only one of these is necessary
-            pred = pred.to(device)
-            y = y.to(device)
+            is_invalid = False
+            for _, value in pred.__dict__.items():
+                if isinstance(value, torch.Tensor):
+                    if torch.isnan(value).any() or torch.isinf(value).any():
+                        print(f"!!! Found NaN/Inf in a prediction tensor. Stopping.")
+                        is_invalid = True
+                        break
+            if is_invalid:
+                # Decide how to handle this, e.g., skip the batch or exit
+                continue 
+
 
             # mean absolute error of one variable
             print("calculating loss...")
