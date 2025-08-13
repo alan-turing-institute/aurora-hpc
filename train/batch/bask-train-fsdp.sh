@@ -43,12 +43,12 @@ echo "## Configuring environment"
 export PRIMARY_PORT=$((16384 + $RANDOM % 16384))
 export PRIMARY_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export OMP_NUM_THREADS=1
-export HF_HOME="/bask/projects/u/usjs9456-ati-test/"
+#export HF_HOME="/bask/projects/u/usjs9456-ati-test/"
 
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip

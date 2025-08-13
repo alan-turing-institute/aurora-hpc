@@ -6,8 +6,8 @@
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
-#SBATCH --job-name auroria-prepare
-#SBATCH --output log-prepare.txt
+#SBATCH --job-name aurora-prepare
+#SBATCH --output log-download.txt
 
 # Execute using:
 # sbatch ./batch-prepare.sh
@@ -37,12 +37,12 @@ module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
 pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet -e ../../.[bask]
 
 echo
 echo "## Downloading data"

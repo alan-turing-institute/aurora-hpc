@@ -8,8 +8,8 @@
 #SBATCH --cpus-per-gpu 36
 #SBATCH --mem 32768
 #SBATCH --constraint=a100_80
-#SBATCH --job-name auroria-finetune
-#SBATCH --output log-finetune.txt
+#SBATCH --job-name aurora-finetune-fsdp
+#SBATCH --output log-finetune-fsdp.txt
 
 # Execute using:
 # sbatch ./batch-finetune.sh
@@ -20,7 +20,7 @@ echo "## Aurora fine-tuning script starting"
 # Quit on error
 set -e
 
-if [ ! -d downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -42,12 +42,11 @@ export OMP_NUM_THREADS=1
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet -e ../../.[bask]
 
 echo
 echo "## Running model"

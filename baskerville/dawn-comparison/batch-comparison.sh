@@ -7,7 +7,7 @@
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
 #SBATCH --mem 0
-#SBATCH --job-name auroria-comparison
+#SBATCH --job-name aurora-comparison
 #SBATCH --output log-comparison.txt
 
 # Execute using:
@@ -19,7 +19,7 @@ echo "## Aurora comparison script starting"
 # Quit on error
 set -e
 
-if [ ! -d ../era5-experiments/downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi

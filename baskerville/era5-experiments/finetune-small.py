@@ -23,7 +23,7 @@ model = AuroraSmall(
 model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../../downloads")
 download_path = download_path.expanduser()
 
 print("loading data...")

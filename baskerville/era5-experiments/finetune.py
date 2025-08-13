@@ -16,7 +16,7 @@ from torch import nn, optim
 # See https://microsoft.github.io/aurora/finetuning.html
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../../downloads")
 download_path = download_path.expanduser()
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")

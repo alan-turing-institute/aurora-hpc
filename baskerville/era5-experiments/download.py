@@ -9,7 +9,7 @@ from pathlib import Path
 import cdsapi
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../../downloads")
 
 c = cdsapi.Client()
 
