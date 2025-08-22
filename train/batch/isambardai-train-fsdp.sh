@@ -24,17 +24,6 @@ if [ ! -d ../../downloads ]; then
 fi
 
 echo
-echo "## Loading modules"
-
-module purge
-
-module load PrgEnv-gnu/8.5.0
-module load craype-network-ofi
-module load brics/nccl/v2.25.1-1-v1.6.x-r2
-module load craype-accel-nvidia90
-
-
-echo
 echo "## Configuring environment"
 
 export PRIMARY_PORT=$((16384 + $RANDOM % 16384))
@@ -44,9 +33,9 @@ export OMP_NUM_THREADS=1
 echo
 echo "## Initialising virtual environment"
 
-source /home/u5q/tomas.u5q/miniforge3/bin/activate
+source $HOME/miniforge3/bin/activate
 
-conda activate aurora
+conda activate aurora_torch26
 
 echo
 echo "## Details"
