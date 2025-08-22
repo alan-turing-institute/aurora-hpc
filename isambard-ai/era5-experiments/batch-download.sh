@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=aurora-prepare
+#SBATCH --job-name=aurora-download
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --gpus-per-node=4
@@ -10,10 +10,10 @@
 #SBATCH --mem=0
 
 # Execute using:
-# sbatch ./batch-prepare.sh
+# sbatch ./batch-download.sh
 
 echo
-echo "## Aurora prepare script starting"
+echo "## Aurora download script starting"
 
 # Quit on error
 set -e
@@ -25,22 +25,12 @@ if [ ! -f $CDSAPI_RC ]; then
   exit 1
 fi
 
-echo 
-echo "## Loading modules"
-
-module purge
-
-module load PrgEnv-gnu/8.5.0
-module load craype-network-ofi
-module load brics/nccl/v2.25.1-1-v1.6.x-r2
-module load craype-accel-nvidia90
-
 echo
 echo "## Initialising virtual environment"
 
-source /home/u5q/tomas.u5q/miniforge3/bin/activate
+source $HOME/miniforge3/bin/activate
 
-conda activate aurora
+conda activate aurora_torch26
 
 echo
 echo "## Downloading data"
@@ -48,4 +38,4 @@ echo "## Downloading data"
 python download.py
 
 echo
-echo "## Aurora prepare script completed"
+echo "## Aurora download script completed"

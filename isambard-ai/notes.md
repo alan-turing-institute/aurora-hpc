@@ -21,8 +21,9 @@ printf "%s%s\n" "$(cat cdsapi.config.example)" "APIKEY" > cdsapi.config
 
 ## Set up conda environment
 
-NOTE: Need to modify based on your setup
-TODO: Make it more generic
+Prerequisites:
+
+Installing mini-forge using the following instructions: https://docs.isambard.ac.uk/user-documentation/guides/python/#conda-installing-and-using-miniforge
 
 ```
 sbatch batch-conda.sh
@@ -62,3 +63,11 @@ You can then immediately perform finetuning with the small (debug) modeul on a 4
 ```
 sbatch batch-finetune-small.sh
 ```
+
+## Fine-tuning the model
+
+```
+sbatch batch-finetune.sh
+```
+
+This should return an out of memory error.

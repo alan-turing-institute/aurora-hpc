@@ -10,37 +10,36 @@
 #SBATCH --mem=0
 
 # Execute using:
-# sbatch ./batch-runmodel.sh
+# sbatch ./batch-conda.sh
 
 echo
-echo "## Aurora runmodel script starting"
+echo "## Aurora conda script starting"
 
 # Quit on error
 set -e
 
-
-echo 
-echo "## Loading modules"
-
-module purge
-
-module load PrgEnv-gnu/8.5.0
-module load craype-network-ofi
-module load brics/nccl/v2.25.1-1-v1.6.x-r2
-module load craype-accel-nvidia90
-
 echo
 echo "## Initialising virtual environment"
 
-source /home/u5q/tomas.u5q/miniforge3/bin/activate
+source $HOME/miniforge3/bin/activate
 
-conda create --name aurora --clone pytorch_env
+conda create -n py311_torch26_cu126 -c conda-forge python=3.11 -y
 
-conda activate aurora
+conda activate py311_torch26_cu126
 
-python -m pip install --upgrade pip --no-cache-dir
-python -m pip install -e ../../aurora --no-cache-dir
-python -m pip install pynvml cdsapi matplotlib --no-cache-dir
+python -m pip install --upgrade pip
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126
+python -m pip install pynvml
+
+conda create --name aurora_torch26 --clone py311_torch26_cu126
+
+conda activate aurora_torch26
+
+pushd ../../aurora/
+python -m pip install .
+popd
+
+python -m pip install cdsapi matplotlib
 
 echo
 echo "## Verifying installation"
