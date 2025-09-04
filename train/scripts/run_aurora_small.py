@@ -6,7 +6,7 @@ import pickle
 import time
 from pathlib import Path
 
-import intel_extension_for_pytorch as ipex
+#import intel_extension_for_pytorch as ipex
 import torch
 import torch.nn as nn
 
@@ -25,7 +25,7 @@ torch.use_deterministic_algorithms(True)
 def main():
     print("seeding")
     torch.manual_seed(0)
-    torch.xpu.random.manual_seed_all(0)
+    #torch.xpu.random.manual_seed_all(0)
     time_start_total = time.time()
 
     # init_process_group(
@@ -42,7 +42,7 @@ def main():
     model = AuroraSmall()
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-small-pretrained.ckpt")
 
-    download_path = Path("../../dawn/era5/era_v_inf")
+    download_path = Path("../../downloads/")
 
     print("preparing model...")
     model.configure_activation_checkpointing()
