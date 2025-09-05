@@ -24,6 +24,7 @@ torch.use_deterministic_algorithms(True)
 
 def main():
     print("seeding")
+    torch.manual_seed(0)
     torch.xpu.random.manual_seed_all(0)
     time_start_total = time.time()
 
@@ -33,6 +34,7 @@ def main():
     #    backend="gloo",
     # )
 
+    device = "cpu"
     device = "xpu"
     print(f"Using {device=}")
 
@@ -59,12 +61,22 @@ def main():
     )
 
     # sampler = DistributedSampler(dataset)
+    #    def seed_worker(worker_id):
+    #        worker_seed = torch.initial_seed() % 2**32
+    #        numpy.random.seed(worker_seed)
+    #        random.seed(worker_seed)
+    #
+    # 	g = torch.Generator()
+    # 	g.manual_seed(0)
+    #
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # We only have one batch.
         shuffle=False,  # We don't need to shuffle.
         # sampler=sampler,
         collate_fn=aurora_collate_fn,
+        # 		worker_init_fn=seed_worker,
+        # 		generator=g,
     )
 
     times = []
