@@ -27,34 +27,39 @@ fi
 echo
 echo "## Loading modules"
 
-module -q purge
-module -q load baskerville
-module -q load bask-apps/live
-module -q load matplotlib/3.7.2-gfbf-2023a
-module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
+#module -q purge
+#module -q load baskerville
+#module -q load bask-apps/live
+#module -q load matplotlib/3.7.2-gfbf-2023a
+#module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
 
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
-. ./venv/bin/activate
+#python -m venv venv
+#. ./venv/bin/activate
 
-pip install --quiet --upgrade pip
-pip install --quiet cdsapi
-pip install --quiet microsoft-aurora
-pip install --quiet -e ../../.[bask]
+#pip install --quiet --upgrade pip
+#pip install --quiet cdsapi
+#pip install --quiet microsoft-aurora
+#pip install --quiet -e ../../.[bask]
 
 echo
 echo "## Running model"
 
 # Track GPU and CPU metrics
-nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
-vmstat -t 1 -y > log-comparison-cpu.txt &
+#nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
+#vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
 # do this 4 times, once per GPU
-for i in {0..3}; do
-    CUDA_VISIBLE_DEVICES=$i python inference-timing.py -n 28 --save -o preds_$i.pkl > inference_28_steps_$i.txt &
+#for i in {0..3}; do
+#    CUDA_VISIBLE_DEVICES=$i python inference-timing.py -n 28 --save -o preds_$i.pkl > inference_28_steps_$i.txt &
+#done
+#randint=$(shuf -i 1-100 -n 1)
+for i in {0..1}; do
+    randint=$(shuf -i 1-1000 -n 1)
+    python inference-timing.py -n 28 --save -o preds_$randint.pkl > inference_28_steps_$randint.txt &
 done
 
 wait
@@ -62,7 +67,7 @@ wait
 echo
 echo "## Tidying up"
 
-deactivate
+#deactivate
 
 echo
 echo "## Aurora inference-timing script completed"
