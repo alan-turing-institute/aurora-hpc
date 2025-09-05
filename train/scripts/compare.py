@@ -13,11 +13,12 @@ def main():
         print("opening ", file)
         with open(file, "rb") as f:
             data = pickle.load(f)
-            tensors.append(data)
+            tensors.append((data, file))
 
     for a, b in zip(tensors[:-1], tensors[1:]):
-        print(torch.equal(a, b))
-        print(torch.allclose(a, b))
+        print(a[1], b[1])
+        print(torch.equal(a[0].surf_vars["10v"], b[0].surf_vars["10v"]))
+        print(torch.allclose(a[0].surf_vars["10v"], b[0].surf_vars["10v"]))
 
 
 if __name__ == "__main__":

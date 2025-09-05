@@ -20,6 +20,7 @@ from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 # os.environ["MASTER_ADDR"] = "0.0.0.0"
 # os.environ["MASTER_PORT"] = "29876"
 torch.use_deterministic_algorithms(True)
+torch.utils.deterministic.fill_uninitialized_memory = False
 
 
 def main():
@@ -109,8 +110,8 @@ def main():
         times.append(time_end - time_start)
         time_start = time.time()
 
-        with open(f"10v_{time_start}.pkl", "wb") as f:
-            pickle.dump(pred.surf_vars["10v"], f)
+        with open(f"preds_{time_start}.pkl", "wb") as f:
+            pickle.dump(pred, f)
         break
 
     # print("preds match:", preds_losses[0][0]==preds_losses[1][0])
