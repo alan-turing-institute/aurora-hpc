@@ -55,6 +55,7 @@ def main(
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
 
     model.eval()
+    #model = model.to("cpu")
     model = model.to("cuda")
 
     print("doing rollout")
@@ -64,7 +65,7 @@ def main(
     with torch.inference_mode():
         time_start = time.time()
         for pred in rollout(model, batch, steps=nsteps):
-            preds.append(pred.to("cpu"))
+            preds.append(pred.to("cpu").surf_vars)
             time_end = time.time()
             print(f"Time for one step: {time_end - time_start}")
             times.append(time_end - time_start)
