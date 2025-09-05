@@ -19,6 +19,7 @@ from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 # os.environ["MASTER_ADDR"] = "0.0.0.0"
 # os.environ["MASTER_PORT"] = "29876"
+torch.use_deterministic_algorithms(True)
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
     #    backend="gloo",
     # )
 
-    device = "cpu"
+    device = "xpu"
     print(f"Using {device=}")
 
     print("loading model...")
