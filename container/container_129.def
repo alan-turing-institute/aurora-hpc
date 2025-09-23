@@ -1,0 +1,41 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:25.06-py3
+
+%post
+    # Set non-interactive frontend for apt
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Install basics
+    apt-get update && apt-get install -y \
+        wget git curl tzdata build-essential \
+        zlib1g-dev libffi-dev libbz2-dev liblzma-dev \
+        libreadline-dev libsqlite3-dev tk-dev uuid-dev \
+        libssl-dev libncurses5-dev libgdbm-dev libnss3-dev \
+        ca-certificates \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Configure UK timezone
+    ln -fs /usr/share/zoneinfo/Europe/London /etc/localtime
+    dpkg-reconfigure -f noninteractive tzdata
+
+    # Upgrade pip + essentials in system python (already present in base image)
+    python3 -m pip install --upgrade pip setuptools wheel
+
+    # (Optional) Install newer torch/vision if you want to override container defaults
+    # python3 -m pip install torch torchvision --extra-index-url https://download.pytorch.org/whl/cu129
+
+    # Clone aurora-hpc repo and install
+    cd /opt
+    git clone https://github.com/alan-turing-institute/aurora-hpc.git
+    cd aurora-hpc
+    git checkout container
+    python3 -m pip install ".[bask]"
+
+%environment
+    export TZ=Europe/London
+    export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec bash
+
