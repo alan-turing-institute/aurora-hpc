@@ -1,0 +1,53 @@
+Bootstrap: docker
+From: nvidia/cuda:11.7.1-cudnn8-devel-ubuntu20.04
+
+%post
+    # Set non-interactive frontend for apt
+    export DEBIAN_FRONTEND=noninteractive
+
+    # Install basic tools and tzdata
+    apt-get update && apt-get install -y \
+        software-properties-common build-essential wget git curl tzdata \
+        && rm -rf /var/lib/apt/lists/*
+
+    # Configure UK timezone
+    ln -fs /usr/share/zoneinfo/Europe/London /etc/localtime
+    dpkg-reconfigure -f noninteractive tzdata
+
+    # Install Python 3.10 and venv support
+    add-apt-repository ppa:deadsnakes/ppa -y
+    apt-get update && apt-get install -y python3.10 python3.10-venv python3.10-distutils
+    curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+
+    # Create Python 3.10 venv
+    python3.10 -m venv /opt/py310
+    /opt/py310/bin/pip install --upgrade pip setuptools wheel
+
+    # Install requested Python packages in venv
+    /opt/py310/bin/pip install \
+        torch==2.0.1+cu117 \
+        torchvision==0.15.2+cu117 \
+        triton==2.0.0 \
+        lit==16.0.5 \
+        --extra-index-url https://download.pytorch.org/whl/cu117
+
+    # Install specific CMake version
+    wget https://github.com/Kitware/CMake/releases/download/v3.26.3/cmake-3.26.3-linux-x86_64.sh
+    bash cmake-3.26.3-linux-x86_64.sh --skip-license --prefix=/usr/local
+    rm cmake-3.26.3-linux-x86_64.sh
+
+    # set up aurora-hpc repo
+    cd /opt
+    git clone https://github.com/alan-turing-institute/aurora-hpc.git
+    cd aurora-hpc
+    /opt/py310/bin/pip install ".[bask]"
+
+%environment
+    export TZ=Europe/London
+    source /opt/py310/bin/activate
+    export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+    export PYTHONUNBUFFERED=1
+
+%runscript
+    exec bash
+
