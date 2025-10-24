@@ -36,6 +36,7 @@ def main():
 
     device = "cpu"
     device = "xpu"
+    device = "cuda"
     print(f"Using {device=}")
 
     print("loading model...")
