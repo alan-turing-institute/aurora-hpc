@@ -51,80 +51,81 @@ SURF_VARS_DS_KEYS_MAP = {
     "msl": "msl",
 }
 
-print("Loading dataset")
-# Data will be downloaded here.
-download_path = Path(args.download_path)
-download_path = download_path.expanduser()
+if False:
+    print("Loading dataset")
+    # Data will be downloaded here.
+    download_path = Path(args.download_path)
+    download_path = download_path.expanduser()
 
-static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
-surf_vars_ds = xr.open_dataset(
-    download_path / "2023-01-surface-level.nc", engine="netcdf4"
-)
-atmos_vars_ds = xr.open_dataset(
-    download_path / "2023-01-atmospheric.nc", engine="netcdf4"
-)
+    static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
+    surf_vars_ds = xr.open_dataset(
+        download_path / "2023-01-surface-level.nc", engine="netcdf4"
+    )
+    atmos_vars_ds = xr.open_dataset(
+        download_path / "2023-01-atmospheric.nc", engine="netcdf4"
+    )
 
-weatherbench2_ifs_ens_mean_2m = [
-    0.7046725,
-    0.6250805,
-    0.7371223,
-    0.7870529,
-    0.8339144,
-    0.8677869,
-    0.9096333,
-    0.938898,
-    0.9709085,
-    0.998581,
-    1.033265,
-    1.063641,
-    1.095916,
-    1.128267,
-    1.164034,
-    1.20062,
-    1.236261,
-    1.275574,
-    1.314509,
-    1.357237,
-    1.3961,
-    1.441059,
-    1.481914,
-    1.528329,
-    1.567438,
-    1.615482,
-    1.653148,
-    1.699029,
-]
+    weatherbench2_ifs_ens_mean_2m = [
+        0.7046725,
+        0.6250805,
+        0.7371223,
+        0.7870529,
+        0.8339144,
+        0.8677869,
+        0.9096333,
+        0.938898,
+        0.9709085,
+        0.998581,
+        1.033265,
+        1.063641,
+        1.095916,
+        1.128267,
+        1.164034,
+        1.20062,
+        1.236261,
+        1.275574,
+        1.314509,
+        1.357237,
+        1.3961,
+        1.441059,
+        1.481914,
+        1.528329,
+        1.567438,
+        1.615482,
+        1.653148,
+        1.699029,
+    ]
 
-weatherbench2_ifs_ens_first_2m = [
-    0.860784,
-    0.794231,
-    0.9006215,
-    0.960666,
-    1.013409,
-    1.063852,
-    1.114111,
-    1.160714,
-    1.20238,
-    1.250151,
-    1.296216,
-    1.348182,
-    1.392303,
-    1.448409,
-    1.498825,
-    1.559912,
-    1.612841,
-    1.676311,
-    1.732587,
-    1.801894,
-    1.858862,
-    1.928962,
-    1.987371,
-    2.061119,
-    2.116542,
-    2.190844,
-    2.246718,
-    2.318011,
-]
+    weatherbench2_ifs_ens_first_2m = [
+        0.860784,
+        0.794231,
+        0.9006215,
+        0.960666,
+        1.013409,
+        1.063852,
+        1.114111,
+        1.160714,
+        1.20238,
+        1.250151,
+        1.296216,
+        1.348182,
+        1.392303,
+        1.448409,
+        1.498825,
+        1.559912,
+        1.612841,
+        1.676311,
+        1.732587,
+        1.801894,
+        1.858862,
+        1.928962,
+        1.987371,
+        2.061119,
+        2.116542,
+        2.190844,
+        2.246718,
+        2.318011,
+    ]
 
 def load_data(filename):
     print("Loading pickle file: {}".format(filename))
@@ -576,8 +577,8 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
     plt.tight_layout()
     savefig(plt, filename)
 
-preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(args.num_files)]
-preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(args.num_files)]
+preds_dawn = [load_data(f"d{i}.pkl") for i in range(args.num_files)]
+preds_bask = [load_data(f"b{i}.pkl") for i in range(args.num_files)]
 
 if args.num_files == 1:
     avg_preds_dawn = preds_dawn[0]
@@ -586,14 +587,15 @@ else:
     avg_preds_dawn = average_data(preds_dawn)
     avg_preds_bask = average_data(preds_bask)
 
-# Generate plots
-plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn")
-plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask")
-plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors")
-plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
-plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
-plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
-plot_weatherbench_comparison(avg_preds_dawn, avg_preds_bask, "plot-weatherbench-comparison")
+if False:
+    # Generate plots
+    plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn")
+    plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask")
+    plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors")
+    plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
+    plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
+    plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
+    plot_weatherbench_comparison(avg_preds_dawn, avg_preds_bask, "plot-weatherbench-comparison")
 
 if args.num_files > 1:
     # Plot reproducibility comparison
