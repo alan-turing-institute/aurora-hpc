@@ -19,7 +19,7 @@ echo "## Aurora inference timing script starting"
 # Quit on error
 set -e
 
-if [ ! -d ../era5-experiments/downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -30,18 +30,15 @@ echo "## Loading modules"
 module -q purge
 module -q load baskerville
 module -q load bask-apps/live
-module -q load matplotlib/3.7.2-gfbf-2023a
 module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
 
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet cdsapi
-pip install --quiet microsoft-aurora
 pip install --quiet -e ../../.[bask]
 
 echo
@@ -53,11 +50,14 @@ vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
 # do this 4 times, once per GPU
+unset WAITING
 for i in {0..3}; do
-    CUDA_VISIBLE_DEVICES=$i python inference-timing.py -n 28 --save -o preds_$i.pkl > inference_28_steps_$i.txt &
+    CUDA_VISIBLE_DEVICES=$i python inference-timing.py -n 28 -d ../../downloads --save -o preds_$i.pkl > inference_28_steps_$i.txt &
+    WAITING+=( $! );
 done
 
-wait
+# Wait only for the processes started in the for loop
+wait "${WAITING[@]}"
 
 echo
 echo "## Tidying up"

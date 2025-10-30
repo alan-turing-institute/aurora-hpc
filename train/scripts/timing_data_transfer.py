@@ -37,9 +37,9 @@ def main(download_path: Path, use_dask: bool, num_workers: int, xpu: bool):
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
-        static_filepath=Path("static.nc"),
-        surface_filepath=Path("2023-01-surface-level.nc"),
-        atmos_filepath=Path("2023-01-atmospheric.nc"),
+        static_data=Path("static.nc"),
+        surface_data=Path("2023-01-surface-level.nc"),
+        atmos_data=Path("2023-01-atmospheric.nc"),
         use_dask=use_dask,
     )
     time_end_init_dataset = time.time()

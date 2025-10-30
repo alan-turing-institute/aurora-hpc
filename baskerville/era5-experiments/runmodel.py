@@ -12,7 +12,7 @@ from aurora import Aurora, rollout, Batch, Metadata
 from pathlib import Path
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../../downloads")
 download_path = download_path.expanduser()
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")

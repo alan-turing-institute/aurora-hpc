@@ -5,6 +5,7 @@
 # Copyright 2025 The Alan Turing Institute
 from pathlib import Path
 
+import argparse
 import torch
 import xarray as xr
 import matplotlib.pyplot as plt
@@ -16,6 +17,33 @@ from aurora import Aurora, rollout, Batch, Metadata
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import batch_collate_fn
 
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--download_path",
+    "-d",
+    help="path to download directory",
+    default="../../era5/era_v_inf",
+)
+parser.add_argument(
+    "--image_type",
+    "-i",
+    help="image type to plot (as a file extension)",
+    default="pdf",
+)
+parser.add_argument(
+    "--num_files",
+    "-n",
+    type=int,
+    help="The number of input data files to read for averaging",
+    default=4,
+)
+args = parser.parse_args()
+
+print("Output format: {}".format(args.image_type))
+print("Number of input files to read: {}".format(args.num_files))
+
+assert args.num_files > 0
+
 SURF_VARS_DS_KEYS_MAP = {
     "2t": "t2m",
     "10u": "u10",
@@ -25,7 +53,7 @@ SURF_VARS_DS_KEYS_MAP = {
 
 print("Loading dataset")
 # Data will be downloaded here.
-download_path = Path("../../dawn/era5/era_v_inf/")
+download_path = Path(args.download_path)
 download_path = download_path.expanduser()
 
 static_vars_ds = xr.open_dataset(download_path / "static.nc", engine="netcdf4")
@@ -36,11 +64,77 @@ atmos_vars_ds = xr.open_dataset(
     download_path / "2023-01-atmospheric.nc", engine="netcdf4"
 )
 
+weatherbench2_ifs_ens_mean_2m = [
+    0.7046725,
+    0.6250805,
+    0.7371223,
+    0.7870529,
+    0.8339144,
+    0.8677869,
+    0.9096333,
+    0.938898,
+    0.9709085,
+    0.998581,
+    1.033265,
+    1.063641,
+    1.095916,
+    1.128267,
+    1.164034,
+    1.20062,
+    1.236261,
+    1.275574,
+    1.314509,
+    1.357237,
+    1.3961,
+    1.441059,
+    1.481914,
+    1.528329,
+    1.567438,
+    1.615482,
+    1.653148,
+    1.699029,
+]
+
+weatherbench2_ifs_ens_first_2m = [
+    0.860784,
+    0.794231,
+    0.9006215,
+    0.960666,
+    1.013409,
+    1.063852,
+    1.114111,
+    1.160714,
+    1.20238,
+    1.250151,
+    1.296216,
+    1.348182,
+    1.392303,
+    1.448409,
+    1.498825,
+    1.559912,
+    1.612841,
+    1.676311,
+    1.732587,
+    1.801894,
+    1.858862,
+    1.928962,
+    1.987371,
+    2.061119,
+    2.116542,
+    2.190844,
+    2.246718,
+    2.318011,
+]
+
 def load_data(filename):
     print("Loading pickle file: {}".format(filename))
     with open(filename, "rb") as f:
         preds = pickle.load(f)
     return preds
+
+def savefig(plt, filename):
+    fullname = "{}.{}".format(filename, args.image_type)
+    plt.savefig(fullname, dpi=300)
 
 def average_data(
     preds_list: list,
@@ -129,7 +223,7 @@ def plot_predict_vs_ground(preds, filename, vars_key="2t"):
     ax[1].set_yticks([])
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    savefig(plt, filename)
 
 def plot_std_dev_comparison(
     std_devs_dawn: list,
@@ -168,7 +262,7 @@ def plot_std_dev_comparison(
     ax[1].set_yticks([])
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    savefig(plt, filename)
 
 def calculate_rmse(preds0, preds1):
     return np.sqrt(np.mean((preds0 - preds1)**2))
@@ -199,7 +293,52 @@ def plot_error_comparison(preds_dawn, preds_bask, filename):
     ax.set_ylabel("Root Mean Square Error")
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    savefig(plt, filename)
+
+def plot_weatherbench_comparison(preds_dawn, preds_bask, filename):
+    print("Plotting graph: {}".format(filename))
+    fig, ax = plt.subplots(2, 2, figsize=(12, 6.5))
+    rmse = []
+
+    step = 27
+    vmin = 0
+    vmax = 5
+    steps = range(1, 28)
+
+    for step in steps:
+        vars_preds_dawn = preds_dawn[step].surf_vars["2t"][0, 0].numpy()
+        vars_preds_bask = preds_bask[step].surf_vars["2t"][0, 0].numpy()
+        vars_actual = surf_vars_ds["t2m"][2 + step][0:720,:].values
+
+        diff_dawn_bask_pred = calculate_difference(
+            vars_preds_dawn,
+            vars_preds_bask,
+        )
+        rmse_dawn_bask_pred = calculate_rmse(
+            vars_preds_dawn,
+            vars_preds_bask,
+        )
+        rmse.append(rmse_dawn_bask_pred)
+        #print("DB step {}, error: {}".format(step, rmse_dawn_bask_pred))
+        #print("IFS mean step {}, error: {}".format(step, weatherbench2_ifs_ens_mean_2m[step]))
+        #print("IFS first step {}, error: {}".format(step, weatherbench2_ifs_ens_first_2m[step]))
+
+    fig, ax = plt.subplots(figsize=(8,5))
+    ax.plot(steps, rmse, linestyle="-", marker="x", color="#9cd839", label="RMSE between DAWN and Baskerville")
+
+    ax.plot(steps, weatherbench2_ifs_ens_mean_2m[1:28], linestyle="-", marker="", color="#4dc169", label="IFS ENS (mean) vs Analysis")
+    ax.errorbar(steps, weatherbench2_ifs_ens_mean_2m[1:28], yerr=rmse, color="#4dc169")
+
+    ax.plot(steps, weatherbench2_ifs_ens_first_2m[1:28], linestyle="-", marker="", color="#228b8b", label="IFS ENS (1st member) vs Analysis")
+    ax.errorbar(steps, weatherbench2_ifs_ens_first_2m[1:28], yerr=rmse, color="#228b8b")
+
+    ax.set_xlabel("Rollout step")
+    ax.set_ylabel("Root Mean Square Error")
+
+    plt.legend()
+
+    plt.tight_layout()
+    savefig(plt, filename)
 
 def plot_errors(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -296,7 +435,7 @@ def plot_errors(preds_dawn, preds_bask, filename):
     #plt.tight_layout()
     #fig.suptitle("Absolute error comparison for two-meter temperature in K ranged (0, 5) at rollout step 28")
     plt.tight_layout()
-    plt.savefig(filename, dpi=300, )
+    savefig(plt, filename)
 
 def plot_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -349,7 +488,7 @@ def plot_losses(preds_dawn, preds_bask, filename):
     ax.legend()
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    savefig(plt, filename)
 
 def plot_var_losses(preds_dawn, preds_bask, filename):
     print("Plotting graph: {}".format(filename))
@@ -435,28 +574,31 @@ def plot_var_losses(preds_dawn, preds_bask, filename):
     axs[1, 0].set_ylabel("Mean Average Error")
 
     plt.tight_layout()
-    plt.savefig(filename, dpi=300)
+    savefig(plt, filename)
 
-preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(4)]
-preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(4)]
+preds_dawn = [load_data(f"preds_{i}-dawn.pkl") for i in range(args.num_files)]
+preds_bask = [load_data(f"preds_{i}-bask.pkl") for i in range(args.num_files)]
 
-avg_preds_dawn = average_data(preds_dawn)
-avg_preds_bask = average_data(preds_bask)
+if args.num_files == 1:
+    avg_preds_dawn = preds_dawn[0]
+    avg_preds_bask = preds_bask[0]
+else:
+    avg_preds_dawn = average_data(preds_dawn)
+    avg_preds_bask = average_data(preds_bask)
 
-plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn.pdf")
-plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask.pdf")
-# plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn.png")
-# plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask.png")
-plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors.pdf")
-# plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors.png")
-plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison.pdf")
-# plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison.png")
-plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses.pdf")
-# plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses.png")
-plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses.pdf")
-# plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses.png")
+# Generate plots
+plot_predict_vs_ground(avg_preds_dawn, "plot-pvg-dawn")
+plot_predict_vs_ground(avg_preds_bask, "plot-pvg-bask")
+plot_errors(avg_preds_dawn, avg_preds_bask, "plot-errors")
+plot_error_comparison(avg_preds_dawn, avg_preds_bask, "plot-error-comparison")
+plot_losses(avg_preds_dawn, avg_preds_bask, "plot-losses")
+plot_var_losses(avg_preds_dawn, avg_preds_bask, "plot-var-losses")
+plot_weatherbench_comparison(avg_preds_dawn, avg_preds_bask, "plot-weatherbench-comparison")
 
-# to avoid memory errors, plot these separately
-# avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
-# avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
-# plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison.pdf")
+if args.num_files > 1:
+    # Plot reproducibility comparison
+    # This plot is only valid if we have a range of results
+    avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
+    avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
+    plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
+

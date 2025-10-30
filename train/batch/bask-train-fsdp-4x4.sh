@@ -2,18 +2,17 @@
 # vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
-#SBATCH --time 0:20:0
-#SBATCH --nodes 2
+#SBATCH --time 1:00:0
+#SBATCH --nodes 4
 #SBATCH --ntasks-per-node 1
-#SBATCH --gpus-per-node 2
-#SBATCH --cpus-per-gpu 36
+#SBATCH --gpus-per-node 1
 #SBATCH --mem 65536
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
-#SBATCH --output log-train.txt
+#SBATCH --output results/four_nodes_one_gpu.txt
 
 # Execute using:
-# sbatch ./bask-train-fsdp.sh
+# sbatch ./bask-train-fsdp-4x4.sh
 
 echo
 echo "## Aurora fine-tuning script starting"
@@ -70,15 +69,18 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-train-gpu.txt &
 vmstat -t 1 -y > log-train-cpu.txt &
 
 # Perform the prediction
-srun bash -c \
-    'python -m torch.distributed.run \
-    --nnodes ${SLURM_JOB_NUM_NODES} \
-    --nproc-per-node ${SLURM_GPUS_PER_NODE} \
-    --master_addr ${PRIMARY_ADDR} \
-    --master_port ${PRIMARY_PORT} \
-    --node_rank ${SLURM_NODEID} \
-    train.py \
-    -d ../../downloads'
+# Repeat this 4 times so we get better logs
+for i in {0..3}; do
+    srun bash -c \
+        'python -m torch.distributed.run \
+        --nnodes ${SLURM_JOB_NUM_NODES} \
+        --nproc-per-node ${SLURM_GPUS_PER_NODE} \
+        --master_addr ${PRIMARY_ADDR} \
+        --master_port ${PRIMARY_PORT} \
+        --node_rank ${SLURM_NODEID} \
+        train.py \
+        -d ../../downloads'
+done
 
 echo
 echo "## Tidying up"

@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=1x4
-#SBATCH --output=one_node_four_gpus.out
+#SBATCH --output=results/one_node_four_gpus.out
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
 #SBATCH -c 24  # Number of cores per task
@@ -42,7 +42,9 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+for i in {0..3}; do
+  mpirun -prepend-rank -n 4 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd

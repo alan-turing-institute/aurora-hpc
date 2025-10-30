@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=1x1
-#SBATCH --output=one_node_one_gpu.out
+#SBATCH --output=results/one_node_one_gpu.out
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
 #SBATCH -c 24  # Number of cores per task
@@ -42,7 +42,11 @@ export ZES_ENABLE_SYSMAN=1
 # Otherwise we're told to.
 export CCL_ZE_IPC_EXCHANGE=sockets
 
-mpirun -prepend-rank -n 1 -ppn 1 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+# mpirun -host ${SLURM_JOB_NODELIST} bash -c 'stdbuf -o0 xpu-smi dump --rawdata --device $SLURM_JOB_GPUS -m 0,1,2,21,22 > gpu-${SLURM_JOB_ID}-${OMPI_COMM_WORLD_RANK}.txt' &
+
+for i in {0..3}; do
+  mpirun -prepend-rank -n 1 -ppn 1 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd

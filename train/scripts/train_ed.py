@@ -1,6 +1,6 @@
 """Fine tune Aurora weather model."""
 
-print("importing...")
+print("importing...", flush=True)
 import argparse
 import os
 import re
@@ -17,29 +17,33 @@ import torch.nn as nn
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
-from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
-from aurora.model.swin3d import (
-    Basic3DDecoderLayer,
-    Basic3DEncoderLayer,
-    Swin3DTransformerBackbone,
-    Swin3DTransformerBlock,
-)
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--xpu", action="store_true", help="boolean of whether to use xpu")
 parser.add_argument(
-    "--shard", action="store_true", help="whether to use full_shard strategy"
-)
-parser.add_argument(
     "--download_path",
     "-d",
     help="path to download directory",
     default="../../era5/era_v_inf",
+)
+parser.add_argument(
+    "--encoders",
+    "-e",
+    type=int,
+    help="encoder/decoder depth",
+    default=12,
+)
+parser.add_argument(
+    "--grad_accum",
+    "-g",
+    type=int,
+    help="gradient accumulation steps; must be a multiple of the world size",
+    default=1,
 )
 args = parser.parse_args()
 
@@ -86,8 +90,9 @@ else:
     RANK = int(os.environ["RANK"])
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 
+assert args.grad_accum % WORLD_SIZE == 0
 
-def main(download_path: str, shard: bool, xpu: bool = False):
+def main(download_path: str, encoder_depth: int, xpu: bool = False):
     if xpu:
         comms_backend = "ccl"
         device_type = "xpu"
@@ -106,40 +111,40 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     )
 
     device = f"{device_type}:{LOCAL_RANK}"
-    print(f"Using {device=}")
+    print(f"Using {device=}", flush=True)
 
-    print("loading model...")
+    print("loading model...", flush=True)
     model = Aurora(
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
+        encoder_depths=(encoder_depth, encoder_depth, encoder_depth),
+        encoder_num_heads=(4, 8, 16),
+        decoder_depths=(encoder_depth, encoder_depth, encoder_depth),
+        decoder_num_heads=(16, 8, 4),
+        embed_dim=256,
+        num_heads=8,
     )
-    model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    # can no longer load checkpoint as we have different model size
+    # model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
     if not xpu:
         torch.cuda.set_device(LOCAL_RANK)
 
     download_path = Path(download_path)
 
-    policy = ModuleWrapPolicy(
-        {Swin3DTransformerBackbone, Basic3DEncoderLayer, Basic3DDecoderLayer}
-    )
-
-    print("preparing model...")
+    print("preparing model...", flush=True)
     model.configure_activation_checkpointing()
     model = FSDP(
         model,
         device_id=LOCAL_RANK,
         use_orig_params=True,
-        sharding_strategy=(
-            ShardingStrategy.FULL_SHARD if shard else ShardingStrategy.NO_SHARD
-        ),
-        auto_wrap_policy=policy if shard else None,
+        sharding_strategy=ShardingStrategy.NO_SHARD,
     )
     model.train()
 
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
 
-    print("loading data...")
+    print("loading data...", flush=True)
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
@@ -148,6 +153,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         atmos_data=Path("2023-01-atmospheric.nc"),
     )
     sampler = DistributedSampler(dataset)
+
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
@@ -158,16 +164,16 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
     times = []
 
-    n_batches_per_optim = 8 / WORLD_SIZE
+    n_batches_per_optim = args.grad_accum // WORLD_SIZE
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
-        print(f"batch {batch}...")
+        print(f"batch {batch}...", flush=True)
 
         optimizer.zero_grad()
 
         with torch.autocast(device_type=device_type):
-            print("performing forward pass...")
+            print("performing forward pass...", flush=True)
             pred = model(X)
 
             # only one of these is necessary
@@ -175,12 +181,12 @@ def main(download_path: str, shard: bool, xpu: bool = False):
             y = y.to(device)
 
             # mean absolute error of one variable
-            print("calculating loss...")
+            print("calculating loss...", flush=True)
 
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
 
-        print("performing backward pass...")
+        print("performing backward pass...", flush=True)
         loss.backward()
 
         if batch % n_batches_per_optim == 0:
@@ -199,18 +205,28 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         avg_time = sum([sum(t[1:]) for t in gathered_times]) / sum(
             [len(times[1:]) for t in gathered_times]
         )
-        print(f"Average time per epoch (ignoring first): {avg_time} seconds")
-        print(f"Effective time for an epoch: {avg_time / WORLD_SIZE} seconds")
-        print(f"Equivalent training speed: {WORLD_SIZE / avg_time} epochs per seconds")
+        print(
+            f"Encoder/decoder depth: ({encoder_depth}, {encoder_depth}, {encoder_depth})", flush=True
+        )
+        print(
+            f"Average time per epoch (ignoring first): {avg_time} seconds", flush=True
+        )
+        print(
+            f"Effective time for an epoch: {avg_time / WORLD_SIZE} seconds", flush=True
+        )
+        print(
+            f"Equivalent training speed: {WORLD_SIZE / avg_time} epochs per seconds",
+            flush=True,
+        )
         total_time = sum([sum(t) for t in gathered_times])
         total_no_epochs = sum([len(t) for t in gathered_times])
-        print(f"Total time for {total_no_epochs} epochs: {total_time}")
+        print(f"Total time for {total_no_epochs} epochs: {total_time}", flush=True)
 
         time_end_total = time.time()
-        print(f"Total time: {time_end_total - time_start_total}")
+        print(f"Total time: {time_end_total - time_start_total}", flush=True)
 
     destroy_process_group()
-    print("done")
+    print("done", flush=True)
 
 
-main(args.download_path, shard=args.shard, xpu=args.xpu)
+main(args.download_path, args.encoders, xpu=args.xpu)

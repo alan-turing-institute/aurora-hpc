@@ -86,7 +86,7 @@ model = DDP(
 ).to(local_rank)
 
 # Data will be downloaded here.
-download_path = Path("./downloads")
+download_path = Path("../../downloads")
 download_path = download_path.expanduser()
 
 print("loading data...")

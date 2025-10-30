@@ -6,8 +6,8 @@
 #SBATCH --nodes 1
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
-#SBATCH --mem 76G
-#SBATCH --job-name auroria-comparison
+#SBATCH --mem 0
+#SBATCH --job-name aurora-comparison
 #SBATCH --output log-comparison.txt
 
 # Execute using:
@@ -19,7 +19,7 @@ echo "## Aurora comparison script starting"
 # Quit on error
 set -e
 
-if [ ! -d ../era5-experiments/downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -30,33 +30,33 @@ echo "## Loading modules"
 module -q purge
 module -q load baskerville
 module -q load bask-apps/live
-module -q load matplotlib/3.7.2-gfbf-2023a
-module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
+
+echo
+echo "## Configuring environment"
 
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet cdsapi
-pip install --quiet microsoft-aurora
+pip install --quiet matplotlib
 pip install --quiet -e ../../.[bask]
 
 echo
 echo "## Running model"
 
 # Track GPU and CPU metrics
-nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
-vmstat -t 1 -y > log-comparison-cpu.txt &
+#nvidia-smi dmon -o TD -s puct -d 1 > log-comparison-gpu.txt &
+#vmstat -t 1 -y > log-comparison-cpu.txt &
 
 # Perform the prediction
 # already done!
 # python inference-timing.py --nsteps 28 --save --output_file preds-bask.pkl
 
 # Generate graphs
-python compare-results.py
+python compare-results.py -d "../../downloads" -i "pdf" -n 4
 
 echo
 echo "## Tidying up"

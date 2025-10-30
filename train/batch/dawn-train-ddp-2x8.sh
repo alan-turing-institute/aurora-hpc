@@ -1,6 +1,6 @@
 #!/bin/bash -l
 #SBATCH --job-name=2x8
-#SBATCH --output=two_nodes_eight_gpus.out
+#SBATCH --output=results/two_nodes_eight_gpus.out
 #SBATCH --account=airr-p8-rcpp-dawn-gpu
 #SBATCH --partition=pvc9 # Dawn PVC partition
 #SBATCH -c 24  # Number of cores per task
@@ -47,7 +47,9 @@ export CCL_ZE_IPC_EXCHANGE=sockets
 
 sycl-ls
 
-mpirun -prepend-rank -n 8 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+for i in {0..3}; do
+  mpirun -prepend-rank -n 8 -ppn 4 python train.py --xpu -d ../../dawn/era5/era_v_inf/
+done
 
 deactivate
 popd
