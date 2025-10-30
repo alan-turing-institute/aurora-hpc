@@ -17,7 +17,7 @@ dev = [
     "pre-commit",
 ]
 bask = [
-    "xarray==2023.1.0",
+    "xarray==2023.06.0",
     "numpy<2.0.0",
 ]
 dawn = [

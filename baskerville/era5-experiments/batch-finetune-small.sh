@@ -7,7 +7,7 @@
 #SBATCH --gpus 1
 #SBATCH --cpus-per-gpu 36
 #SBATCH --constraint=a100_40
-#SBATCH --job-name auroria-finetune-small
+#SBATCH --job-name aurora-finetune-small
 #SBATCH --output log-finetune-small.txt
 
 # Execute using:
@@ -19,7 +19,7 @@ echo "## Aurora fine-tuning script starting"
 # Quit on error
 set -e
 
-if [ ! -d downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -36,12 +36,11 @@ module -q load PyTorch-bundle/2.1.2-foss-2023a-CUDA-12.1.1
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet -e ../../.[bask]
 
 echo
 echo "## Running model"

@@ -2,11 +2,12 @@
 # vim: et:ts=4:sts=4:sw=4
 
 # Execute using:
+# srun --qos turing --account usjs9456-ati-test --time 1:00:00 --nodes 1 --gpus 1 --cpus-per-gpu 36 --mem 0 --pty /bin/bash
 # . ./batch-srun.sh
 
 echo "## Aurora srun script starting"
 
-if [ ! -d downloads ]; then
+if [ ! -d ../../downloads ]; then
   echo "Please run the batch-download.sh script to download the data."
   exit 1
 fi
@@ -30,11 +31,11 @@ export MASTER_PORT=9724
 
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3.11 -m venv venv
 . ./venv/bin/activate
 
-#pip install --quiet --upgrade pip
-#pip install --quiet cdsapi
-#pip install --quiet -e ../../aurora
+pip install --quiet --upgrade pip
+pip install --quiet cdsapi
+pip install --quiet -e ../../.[bask]
 
 echo "## Aurora srun script completed"

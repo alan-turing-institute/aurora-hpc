@@ -2,7 +2,7 @@
 # vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
-#SBATCH --time 0:20:0
+#SBATCH --time 1:00:0
 #SBATCH --nodes 2
 #SBATCH --ntasks-per-node 1
 #SBATCH --gpus-per-node 4
@@ -12,7 +12,7 @@
 #SBATCH --output results/two_nodes_eight_gpus.txt
 
 # Execute using:
-# sbatch ./bask-train-fsdp.sh
+# sbatch ./bask-train-fsdp-2x8.sh
 
 echo
 echo "## Aurora fine-tuning script starting"
@@ -42,12 +42,12 @@ echo "## Configuring environment"
 export PRIMARY_PORT=$((16384 + $RANDOM % 16384))
 export PRIMARY_ADDR=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
 export OMP_NUM_THREADS=1
-export HF_HOME="/bask/projects/u/usjs9456-ati-test/"
+#export HF_HOME="/bask/projects/u/usjs9456-ati-test/"
 
 echo
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
@@ -69,6 +69,7 @@ nvidia-smi dmon -o TD -s puct -d 1 > log-train-gpu.txt &
 vmstat -t 1 -y > log-train-cpu.txt &
 
 # Perform the prediction
+# Repeat this 4 times so we get better logs
 for i in {0..3}; do
     srun bash -c \
         'python -m torch.distributed.run \

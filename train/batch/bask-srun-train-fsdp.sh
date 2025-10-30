@@ -2,7 +2,8 @@
 # vim: et:ts=4:sts=4:sw=4
 
 # Execute using:
-# sbatch ./bask-local-train-fsdp.sh
+# srun --qos turing --account usjs9456-ati-test --time 1:00:00 --nodes 1 --gpus 1 --cpus-per-gpu 36 --mem 16384 --pty /bin/bash
+# ./bask-local-train-fsdp.sh
 
 echo "## Aurora fine-tuning script starting"
 
@@ -30,13 +31,11 @@ export OMP_NUM_THREADS=1
 
 echo "## Initialising virtual environment"
 
-python -m venv venv
+python3 -m venv venv
 . ./venv/bin/activate
 
 pip install --quiet --upgrade pip
-pip install --quiet xarray==2023.1.0
-pip install --quiet cdsapi
-pip install --quiet -e ../../aurora
+pip install --quiet ../../.[bask]
 
 echo "## Running model"
 

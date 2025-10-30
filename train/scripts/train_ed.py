@@ -31,6 +31,20 @@ parser.add_argument(
     help="path to download directory",
     default="../../era5/era_v_inf",
 )
+parser.add_argument(
+    "--encoders",
+    "-e",
+    type=int,
+    help="encoder/decoder depth",
+    default=12,
+)
+parser.add_argument(
+    "--grad_accum",
+    "-g",
+    type=int,
+    help="gradient accumulation steps; must be a multiple of the world size",
+    default=1,
+)
 args = parser.parse_args()
 
 if args.xpu:
@@ -76,8 +90,9 @@ else:
     RANK = int(os.environ["RANK"])
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 
+assert args.grad_accum % WORLD_SIZE == 0
 
-def main(download_path: str, xpu: bool = False):
+def main(download_path: str, encoder_depth: int, xpu: bool = False):
     if xpu:
         comms_backend = "ccl"
         device_type = "xpu"
@@ -102,15 +117,17 @@ def main(download_path: str, xpu: bool = False):
     model = Aurora(
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
-        encoder_depths=(12, 12, 12),
+        encoder_depths=(encoder_depth, encoder_depth, encoder_depth),
         encoder_num_heads=(4, 8, 16),
-        decoder_depths=(12, 12, 12),
+        decoder_depths=(encoder_depth, encoder_depth, encoder_depth),
         decoder_num_heads=(16, 8, 4),
         embed_dim=256,
         num_heads=8,
     )
     # can no longer load checkpoint as we have different model size
     # model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    if not xpu:
+        torch.cuda.set_device(LOCAL_RANK)
 
     download_path = Path(download_path)
 
@@ -147,6 +164,8 @@ def main(download_path: str, xpu: bool = False):
 
     times = []
 
+    n_batches_per_optim = args.grad_accum // WORLD_SIZE
+
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
         print(f"batch {batch}...", flush=True)
@@ -170,8 +189,9 @@ def main(download_path: str, xpu: bool = False):
         print("performing backward pass...", flush=True)
         loss.backward()
 
-        print("optimizing...", flush=True)
-        optimizer.step()
+        if batch % n_batches_per_optim == 0:
+            print("optimizing...")
+            optimizer.step()
 
         time_end = time.time()
         times.append(time_end - time_start)
@@ -184,6 +204,9 @@ def main(download_path: str, xpu: bool = False):
     if int(RANK) == 0:
         avg_time = sum([sum(t[1:]) for t in gathered_times]) / sum(
             [len(times[1:]) for t in gathered_times]
+        )
+        print(
+            f"Encoder/decoder depth: ({encoder_depth}, {encoder_depth}, {encoder_depth})", flush=True
         )
         print(
             f"Average time per epoch (ignoring first): {avg_time} seconds", flush=True
@@ -206,4 +229,4 @@ def main(download_path: str, xpu: bool = False):
     print("done", flush=True)
 
 
-main(args.download_path, xpu=args.xpu)
+main(args.download_path, args.encoders, xpu=args.xpu)
