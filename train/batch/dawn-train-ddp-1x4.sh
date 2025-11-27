@@ -32,16 +32,14 @@ echo
 echo "## Loading modules"
 
 module purge
-module load default-dawn
-module load lua
-module load intel-oneapi-ccl/2021.14.0
-module load intel-oneapi-mpi/2021.14.1
-module load intel-oneapi-mkl/2025.0.1
+module load rhel9/default-dawn
+module load intel-oneapi-mkl/2025.1.0
+module load intel-oneapi-ccl/2021.15.0
 
 echo
 echo "## Configuring environment"
 
-VENV_DIR=../../dawn/environments/venv_3_11_11
+VENV_DIR=../../dawn/environments/venv_3_11_11_rhel9
 
 # Merge tiles into full devices, for extra memory.
 export ZE_FLAT_DEVICE_HIERARCHY=COMPOSITE
@@ -67,6 +65,7 @@ source ${VENV_DIR}/bin/activate
 echo
 echo "## Details"
 echo
+echo "Date: $(date)"
 echo "Nodes: ${SLURM_JOB_NUM_NODES}"
 echo "GPUs per node: ${SLURM_GPUS_PER_NODE}"
 echo "Tasks per node: ${SLURM_NTASKS_PER_NODE}"
