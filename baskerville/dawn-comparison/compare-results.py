@@ -601,4 +601,3 @@ if args.num_files > 1:
     avg_preds_dawn, std_devs_dawn = average_data(preds_dawn, return_std_devs=True)
     avg_preds_bask, std_devs_bask = average_data(preds_bask, return_std_devs=True)
     plot_std_dev_comparison(std_devs_dawn, std_devs_bask, "plot-std-dev-comparison")
-

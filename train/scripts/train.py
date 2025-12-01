@@ -14,6 +14,12 @@ warnings.filterwarnings(
 
 import torch
 import torch.nn as nn
+from aurora.model.swin3d import (
+    Basic3DDecoderLayer,
+    Basic3DEncoderLayer,
+    Swin3DTransformerBackbone,
+    Swin3DTransformerBlock,
+)
 from torch.distributed import all_gather, destroy_process_group, init_process_group
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
@@ -21,12 +27,6 @@ from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.utils.data import DataLoader, DistributedSampler
 
 from aurora import Aurora
-from aurora.model.swin3d import (
-    Basic3DDecoderLayer,
-    Basic3DEncoderLayer,
-    Swin3DTransformerBackbone,
-    Swin3DTransformerBlock,
-)
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
