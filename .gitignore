@@ -2,6 +2,7 @@
 weather.sh
 *.pkl
 ignore/
+isambard/environments
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
