@@ -99,15 +99,17 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     time_start_total = time.time()
     print(f"Script start time: {dt.now()}")
 
-    print("Initialising process group with backend", comms_backend, flush=True)
+    # print("Initialising process group with backend", comms_backend, flush=True)
+    # device = f"{device_type}:{LOCAL_RANK}"
     # ToDo Run 2 or more processes.
-    init_process_group(
-        world_size=int(WORLD_SIZE),
-        rank=int(RANK),
-        backend=comms_backend,
-    )
+    # init_process_group(
+    #    world_size=int(WORLD_SIZE),
+    #    rank=int(RANK),
+    #    backend=comms_backend,
+    # )
 
-    device = f"{device_type}:{LOCAL_RANK}"
+    # device = f"{device_type}:{LOCAL_RANK}"
+    device = "cuda"
     print(f"Using {device=}")
 
     print(f"Start time loading model: {dt.now()}")
@@ -117,8 +119,9 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         autocast=True,  # Use AMP.
     )
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
-    if not xpu:
-        torch.cuda.set_device(LOCAL_RANK)
+    model.to(device)
+    # if not xpu:
+    #    torch.cuda.set_device(LOCAL_RANK)
     print(f"End time loading model: {dt.now()}")
 
     download_path = Path(download_path)
@@ -129,17 +132,17 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
     print("preparing model...")
     model.configure_activation_checkpointing()
-    model = FSDP(
-        model,
-        device_id=LOCAL_RANK,
-        use_orig_params=True,
-        sharding_strategy=(
-            ShardingStrategy.FULL_SHARD if shard else ShardingStrategy.NO_SHARD
-        ),
-        auto_wrap_policy=policy if shard else None,
-    )
-    model.train()
-
+    #    model = FSDP(
+    #        model,
+    #        device_id=LOCAL_RANK,
+    #        use_orig_params=True,
+    #        sharding_strategy=(
+    #            ShardingStrategy.FULL_SHARD if shard else ShardingStrategy.NO_SHARD
+    #        ),
+    #        auto_wrap_policy=policy if shard else None,
+    #    )
+    #    model.train()
+    #
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
 
@@ -150,20 +153,22 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         data_path=download_path,
         t=1,
         static_data=Path("static.nc"),
-        surface_data=Path("2023-01-surface-level-36.nc"),
-        atmos_data=Path("2023-01-atmospheric-36.nc"),
+        # surface_data=Path("2023-01-surface-level-36.nc"),
+        surface_data=Path("2023-01-01-surface-level.nc"),
+        # atmos_data=Path("2023-01-atmospheric.nc"),
+        atmos_data=Path("2023-01-01-atmospheric.nc"),
         len_max=32,
     )
     time_end_loading_data = time.time()
     print(f"End time loading data: {dt.now()}")
     print(f"Time loading data: {time_end_loading_data - time_start_loading_data}")
 
-    sampler = DistributedSampler(dataset)
+    # sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
         shuffle=False,  # We don't need to shuffle.
-        sampler=sampler,
+        # sampler=sampler,
         collate_fn=aurora_collate_fn,
     )
 
@@ -177,16 +182,21 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
         optimizer.zero_grad()
 
-        with torch.autocast(device_type=device_type):
+        y = y.to(device)
+        X = X.to(device)
+        print(f"finished X and y to device: {time.time()-time_start}")
+
+        from contextlib import nullcontext
+
+        # with torch.autocast(device_type=device_type):
+        with nullcontext():
             print("performing forward pass...")
             pred = model(X)
             print(f"finished model forward: {time.time()-time_start}")
 
             # only one of these is necessary
-            pred = pred.to(device)
-            print(f"finished pred to device: {time.time()-time_start}")
-            y = y.to(device)
-            print(f"finished y to device: {time.time()-time_start}")
+            # pred = pred.to(device)
+            # print(f"finished pred to device: {time.time()-time_start}")
 
             # mean absolute error of one variable
             print("calculating loss...")
@@ -194,7 +204,11 @@ def main(download_path: str, shard: bool, xpu: bool = False):
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
             print(f"finished loss calc: {time.time()-time_start}")
-        
+            # if torch.isnan(loss) or torch.isinf(loss):
+            #    print("Loss is NaN or Inf!")
+            #    print(f"pred has NaN: {torch.isnan(pred).any()}")
+            #    print(f"y has NaN: {torch.isnan(y).any()}")
+
         print("performing backward pass...")
         loss.backward()
         print(f"finished loss backward: {time.time()-time_start}")
@@ -209,6 +223,8 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         times.append(time_end - time_start)
         time_start = time.time()
 
+    print("done")
+    exit(0)
     times = torch.Tensor(times).to(device)
     gathered_times = [torch.zeros(times.shape).to(device) for _ in range(WORLD_SIZE)]
     all_gather(gathered_times, times)

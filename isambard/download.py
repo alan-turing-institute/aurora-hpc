@@ -2,6 +2,7 @@
 # vim: et:ts=4:sts=4:sw=4
 
 import argparse
+import sys
 
 # SPDX-License-Identifier: MIT
 # Copyright 2025 The Alan Turing Institute
@@ -14,22 +15,24 @@ c = cdsapi.Client()
 
 def main(args):
     parser = argparse.ArgumentParser()
-    parser.add_argumet(
+    parser.add_argument(
         "download_path",
         type=Path,
         default="../../datasets/era5",
         help="The location to save the datasets to.",
     )
     parsed = parser.parse_args()
-    download_path = parsed.download_path.abspath()
+    download_path = parsed.download_path.absolute()
 
-    if not download_path.isdir():
+    if not download_path.is_dir():
         print(f"{download_path=} doesn't exist or isn't a directory")
         exit(1)
 
-    # Download the static variables.
-    if not (download_path / "static.nc").exists():
-        c.retrieve(
+    times = ["00:00", "06:00", "12:00", "18:00"]
+
+    for x in [
+        (
+            "static.nc",
             "reanalysis-era5-single-levels",
             {
                 "product_type": "reanalysis",
@@ -44,13 +47,9 @@ def main(args):
                 "time": "00:00",
                 "format": "netcdf",
             },
-            str(download_path / "static.nc"),
-        )
-    print("Static variables downloaded!")
-
-    # Download the surface-level variables.
-    if not (download_path / "2023-01-01-surface-level.nc").exists():
-        c.retrieve(
+        ),
+        (
+            "2023-01-01-surface-level.nc",
             "reanalysis-era5-single-levels",
             {
                 "product_type": "reanalysis",
@@ -63,16 +62,12 @@ def main(args):
                 "year": "2023",
                 "month": "01",
                 "day": "01",
-                "time": ["00:00", "06:00", "12:00", "18:00"],
+                "time": times,
                 "format": "netcdf",
             },
-            str(download_path / "2023-01-01-surface-level.nc"),
-        )
-    print("Surface-level variables downloaded!")
-
-    # Download the atmospheric variables.
-    if not (download_path / "2023-01-01-atmospheric.nc").exists():
-        c.retrieve(
+        ),
+        (
+            "2023-01-01-atmospheric.nc",
             "reanalysis-era5-pressure-levels",
             {
                 "product_type": "reanalysis",
@@ -101,12 +96,20 @@ def main(args):
                 "year": "2023",
                 "month": "01",
                 "day": "01",
-                "time": ["00:00", "06:00", "12:00", "18:00"],
+                "time": times,
                 "format": "netcdf",
             },
-            str(download_path / "2023-01-01-atmospheric.nc"),
-        )
-    print("Atmospheric variables downloaded!")
+        ),
+    ]:
+        the_path = download_path / x[0]
+        if not the_path.exists():
+            print("Retrieving", x[0])
+            c.retrieve(
+                x[1],
+                x[2],
+                the_path,
+            )
+            print("Retrieved")
 
 
 if __name__ == "__main__":

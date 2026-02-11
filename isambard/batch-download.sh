@@ -24,7 +24,7 @@ fi
 echo
 echo "## Downloading data"
 
-python download.py
+python download.py ../../datasets/era5/
 
 echo
 echo "## Aurora prepare script completed"
