@@ -8,6 +8,7 @@ import time
 import warnings
 from datetime import datetime as dt
 from pathlib import Path
+from typing import Iterator, Tuple
 
 warnings.filterwarnings(
     "ignore", category=UserWarning, message="TypedStorage is deprecated"
@@ -20,6 +21,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.distributed.fsdp import ShardingStrategy
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
 from torch.utils.data import DataLoader, DistributedSampler
+from torch.utils.tensorboard import SummaryWriter
 
 from aurora import Aurora
 from aurora.model.swin3d import (
@@ -41,6 +43,24 @@ parser.add_argument(
     "-d",
     help="path to download directory",
     default="../../era5/era_v_inf",
+)
+parser.add_argument(
+    "--tb_logdir",
+    type=str,
+    default="runs/aurora_train",
+    help="TensorBoard log directory",
+)
+parser.add_argument(
+    "--tb_log_interval",
+    type=int,
+    default=1,
+    help="Log scalar/system metrics every N batches",
+)
+parser.add_argument(
+    "--tb_hist_interval",
+    type=int,
+    default=50,
+    help="Log gradient histograms every N batches (0 disables)",
 )
 args = parser.parse_args()
 
@@ -98,6 +118,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
     time_start_total = time.time()
     print(f"Script start time: {dt.now()}")
+    is_main_process = int(RANK) == 0
 
     # print("Initialising process group with backend", comms_backend, flush=True)
     # device = f"{device_type}:{LOCAL_RANK}"
@@ -145,6 +166,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     #
     # AdamW, as used in the paper.
     optimizer = torch.optim.AdamW(model.parameters())
+    writer = SummaryWriter(log_dir=args.tb_logdir) if is_main_process else None
 
     time_start_loading_data = time.time()
     print(f"Start time loading data: {dt.now()}")
@@ -154,9 +176,9 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         t=1,
         static_data=Path("static.nc"),
         # surface_data=Path("2023-01-surface-level-36.nc"),
-        surface_data=Path("2023-01-01-surface-level.nc"),
+        surface_data=Path("2023-01-surface-level-36.nc"),
         # atmos_data=Path("2023-01-atmospheric.nc"),
-        atmos_data=Path("2023-01-01-atmospheric.nc"),
+        atmos_data=Path("2023-01-atmospheric-36.nc"),
         len_max=32,
     )
     time_end_loading_data = time.time()
@@ -173,14 +195,16 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     )
 
     times = []
-
-    n_batches_per_optim = 8 / WORLD_SIZE
+    target_global_batch = 8
+    accum_steps = max(1, (target_global_batch + WORLD_SIZE - 1) // WORLD_SIZE)
+    print(f"Using gradient accumulation: {accum_steps=}, {target_global_batch=}")
+    optimizer_steps = 0
+    optimizer.zero_grad(set_to_none=True)
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
+        step_start = time.time()
         print(f"batch {batch}...")
-
-        optimizer.zero_grad()
 
         y = y.to(device)
         X = X.to(device)
@@ -203,6 +227,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
+            loss_for_backward = loss / accum_steps
             print(f"finished loss calc: {time.time()-time_start}")
             # if torch.isnan(loss) or torch.isinf(loss):
             #    print("Loss is NaN or Inf!")
@@ -210,18 +235,133 @@ def main(download_path: str, shard: bool, xpu: bool = False):
             #    print(f"y has NaN: {torch.isnan(y).any()}")
 
         print("performing backward pass...")
-        loss.backward()
+        loss_for_backward.backward()
         print(f"finished loss backward: {time.time()-time_start}")
 
-        if batch % n_batches_per_optim == 0:
+        should_log = writer is not None and (
+            args.tb_log_interval > 0 and batch % args.tb_log_interval == 0
+        )
+        if should_log:
+            global_step = batch
+            writer.add_scalar("train/loss", loss.detach().item(), global_step)
+            writer.add_scalar(
+                "train/loss_scaled_for_backward",
+                loss_for_backward.detach().item(),
+                global_step,
+            )
+            writer.add_scalar(
+                "train/loss_is_finite",
+                float(torch.isfinite(loss.detach()).item()),
+                global_step,
+            )
+            writer.add_scalar("optim/lr", optimizer.param_groups[0]["lr"], global_step)
+
+            grad_l2_norm_sq = 0.0
+            grad_max_abs = 0.0
+            grad_nonfinite_elems = 0.0
+            grad_total_elems = 0.0
+            param_l2_norm_sq = 0.0
+            for _, param in model.named_parameters():
+                param_l2_norm_sq += float(
+                    torch.sum(param.detach().float() * param.detach().float()).item()
+                )
+                if param.grad is None:
+                    continue
+                grad = param.grad.detach()
+                grad_l2_norm_sq += float(torch.sum(grad.float() * grad.float()).item())
+                grad_max_abs = max(grad_max_abs, float(grad.abs().max().item()))
+                grad_nonfinite_elems += float((~torch.isfinite(grad)).sum().item())
+                grad_total_elems += float(grad.numel())
+            grad_l2_norm = grad_l2_norm_sq**0.5
+            grad_nonfinite_frac = (
+                grad_nonfinite_elems / grad_total_elems if grad_total_elems > 0 else 0.0
+            )
+            writer.add_scalar("grad/l2_norm", grad_l2_norm, global_step)
+            writer.add_scalar("grad/max_abs", grad_max_abs, global_step)
+            writer.add_scalar(
+                "grad/nonfinite_fraction", grad_nonfinite_frac, global_step
+            )
+            writer.add_scalar("model/param_l2_norm", param_l2_norm_sq**0.5, global_step)
+
+            x_data = _batch_to_tensor(X).float()
+            y_data = _batch_to_tensor(y).float()
+            writer.add_scalar(
+                "data/input_nan_fraction",
+                float(torch.isnan(x_data).float().mean().item()),
+                global_step,
+            )
+            writer.add_scalar(
+                "data/input_inf_fraction",
+                float(torch.isinf(x_data).float().mean().item()),
+                global_step,
+            )
+            writer.add_scalar(
+                "data/input_zero_fraction",
+                float((x_data == 0).float().mean().item()),
+                global_step,
+            )
+            writer.add_scalar(
+                "data/target_nan_fraction",
+                float(torch.isnan(y_data).float().mean().item()),
+                global_step,
+            )
+            writer.add_scalar(
+                "data/target_inf_fraction",
+                float(torch.isinf(y_data).float().mean().item()),
+                global_step,
+            )
+            writer.add_scalar(
+                "data/target_zero_fraction",
+                float((y_data == 0).float().mean().item()),
+                global_step,
+            )
+
+            if torch.cuda.is_available():
+                writer.add_scalar(
+                    "system/cuda_memory_allocated_mb",
+                    torch.cuda.memory_allocated() / (1024**2),
+                    global_step,
+                )
+                writer.add_scalar(
+                    "system/cuda_memory_reserved_mb",
+                    torch.cuda.memory_reserved() / (1024**2),
+                    global_step,
+                )
+                writer.add_scalar(
+                    "system/cuda_max_memory_allocated_mb",
+                    torch.cuda.max_memory_allocated() / (1024**2),
+                    global_step,
+                )
+
+            if args.tb_hist_interval > 0 and batch % args.tb_hist_interval == 0:
+                for name, param in model.named_parameters():
+                    if param.grad is not None:
+                        writer.add_histogram(
+                            f"grad_hist/{name}", param.grad.detach(), global_step
+                        )
+
+        micro_step = batch + 1
+        is_accum_boundary = micro_step % accum_steps == 0
+        is_last_batch = micro_step == len(data_loader)
+        if is_accum_boundary or is_last_batch:
             print("optimizing...")
             optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            optimizer_steps += 1
             print(f"finished optimizer step: {time.time()-time_start}")
+            if writer is not None:
+                writer.add_scalar("optim/step", optimizer_steps, batch)
 
         time_end = time.time()
         print(f"Time for 1 iteration: {time_end - time_start}")
+        if should_log:
+            writer.add_scalar("timing/iter_seconds", time_end - step_start, batch)
         times.append(time_end - time_start)
         time_start = time.time()
+
+    if writer is not None:
+        writer.flush()
+        writer.close()
 
     print("done")
     exit(0)
@@ -245,6 +385,26 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
     destroy_process_group()
     print("done")
+
+
+def _iter_batch_tensors(batch_obj) -> Iterator[Tuple[str, torch.Tensor]]:
+    if isinstance(batch_obj, torch.Tensor):
+        yield "tensor", batch_obj
+        return
+
+    for group_name in ("surf_vars", "static_vars", "atmos_vars"):
+        group = getattr(batch_obj, group_name, None)
+        if isinstance(group, dict):
+            for name, value in group.items():
+                if isinstance(value, torch.Tensor):
+                    yield f"{group_name}/{name}", value
+
+
+def _batch_to_tensor(batch_obj) -> torch.Tensor:
+    tensors = [t.reshape(-1) for _, t in _iter_batch_tensors(batch_obj)]
+    if not tensors:
+        return torch.zeros(1)
+    return torch.cat(tensors)
 
 
 main(args.download_path, shard=args.shard, xpu=args.xpu)
