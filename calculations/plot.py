@@ -4,10 +4,12 @@
 # SPDX-License-Identifier: MIT
 # Copyright 2025 The Alan Turing Institute
 
-import struct
-import matplotlib.pyplot as plt
 import argparse
 import csv
+import struct
+
+import matplotlib.pyplot as plt
+
 
 class Plot:
     size = 1024
@@ -19,7 +21,7 @@ class Plot:
 
     def plot_graph(self, filename):
         print("Plotting graph: {}".format(filename))
-        fig, ax = plt.subplots(figsize=(8,5))
+        fig, ax = plt.subplots(figsize=(8, 5))
         ax.set_yscale("log")
         for pos, (name, data) in enumerate(self.data_lines):
             device, datatype = name.replace(" (", "-(").split()
@@ -37,16 +39,24 @@ class Plot:
                     "fp16": "#228b8b",
                     "bf16": "#471b6d",
                 }[datatype]
-                ax.plot(self.steps, data, color=colour, linestyle=linestyle, marker=marker, label=name, linewidth=linewidth)
+                ax.plot(
+                    self.steps,
+                    data,
+                    color=colour,
+                    linestyle=linestyle,
+                    marker=marker,
+                    label=name,
+                    linewidth=linewidth,
+                )
         ax.set_xlabel("Matrix {} steps".format(self.operation))
         ax.set_ylabel("Cumulative Mean Square Error")
-        ax.legend();
+        ax.legend()
         plt.tight_layout()
         plt.savefig(filename, dpi=300)
         plt.close()
 
     def load_data(self, filename):
-        with open(filename, 'r') as fh:
+        with open(filename, "r") as fh:
             steps = []
             reader = csv.reader(fh)
             headers = next(reader)
@@ -78,10 +88,20 @@ class Plot:
         self.data_lines.clear()
         self.steps.clear()
 
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--operation", "-x", default="Multpiply-and-Accumulate", help="The name of the operation being plotted")
-parser.add_argument("--filein", "-i", action="append", help="Filename for the additional data to load")
-parser.add_argument("--fileout", "-o", help="Filename to save the graphs out to, without extension")
+parser.add_argument(
+    "--operation",
+    "-x",
+    default="Multpiply-and-Accumulate",
+    help="The name of the operation being plotted",
+)
+parser.add_argument(
+    "--filein", "-i", action="append", help="Filename for the additional data to load"
+)
+parser.add_argument(
+    "--fileout", "-o", help="Filename to save the graphs out to, without extension"
+)
 args = parser.parse_args()
 
 plot = Plot(args.operation)

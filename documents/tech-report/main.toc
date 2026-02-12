@@ -49,4 +49,4 @@
 \contentsline {subsection}{\numberline {B.6}Multiplication and addition in isolation}{43}{subsection.B.6}%
 \contentsline {subsection}{\numberline {B.7}Flat \textit {vs.} Composite}{48}{subsection.B.7}%
 \contentsline {subsection}{\numberline {B.8}Reproducibility}{49}{subsection.B.8}%
-\babel@toc {british}{}\relax 
+\babel@toc {british}{}\relax

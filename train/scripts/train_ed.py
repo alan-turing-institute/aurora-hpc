@@ -83,6 +83,7 @@ else:
     RANK = int(os.environ["RANK"])
     LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 
+
 def main(download_path: str, encoder_depth: int, xpu: bool = False):
     if xpu:
         comms_backend = "ccl"
@@ -197,7 +198,8 @@ def main(download_path: str, encoder_depth: int, xpu: bool = False):
             [len(times[1:]) for t in gathered_times]
         )
         print(
-            f"Encoder/decoder depth: ({encoder_depth}, {encoder_depth}, {encoder_depth})", flush=True
+            f"Encoder/decoder depth: ({encoder_depth}, {encoder_depth}, {encoder_depth})",
+            flush=True,
         )
         print(
             f"Average time per epoch (ignoring first): {avg_time} seconds", flush=True
