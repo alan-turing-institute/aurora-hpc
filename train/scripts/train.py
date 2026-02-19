@@ -93,6 +93,12 @@ def parse_train_config() -> TrainConfig:
         default=32,
         help="Maximum dataset length used by AuroraDataset",
     )
+    parser.add_argument(
+        "--epochs",
+        type=int,
+        default=1,
+        help="Number of epochs to fine-tune for",
+    )
     args = parser.parse_args(sys.argv[1:])
     return TrainConfig(
         download_path=Path(args.download_path),
@@ -103,6 +109,7 @@ def parse_train_config() -> TrainConfig:
         tb_hist_interval=args.tb_hist_interval,
         target_global_batch=args.target_global_batch,
         len_max=args.len_max,
+        epochs=args.epochs,
     )
 
 
@@ -370,58 +377,59 @@ def run_train_loop(
     optimizer.zero_grad(set_to_none=True)
     time_start = time.time()
 
-    for batch, (X, y) in enumerate(data_loader):
-        step_start = time.time()
-        print(f"batch {batch}...")
+    for i in range(cfg.epochs):
+        for batch, (X, y) in enumerate(data_loader):
+            step_start = time.time()
+            print(f"batch {batch}...")
 
-        y = y.to(ctx.device)
-        X = X.to(ctx.device)
-        print(f"finished X and y to device: {time.time() - time_start}")
+            y = y.to(ctx.device)
+            X = X.to(ctx.device)
+            print(f"finished X and y to device: {time.time() - time_start}")
 
-        print("performing forward pass...")
-        pred = model(X)
-        print(f"finished model forward: {time.time() - time_start}")
+            print("performing forward pass...")
+            pred = model(X)
+            print(f"finished model forward: {time.time() - time_start}")
 
-        print("calculating loss...")
-        loss = mae(pred, y)
-        loss_for_backward = loss / accum_steps
-        print(f"finished loss calc: {time.time() - time_start}")
+            print("calculating loss...")
+            loss = mae(pred, y)
+            loss_for_backward = loss / accum_steps
+            print(f"finished loss calc: {time.time() - time_start}")
 
-        print("performing backward pass...")
-        loss_for_backward.backward()
-        print(f"finished loss backward: {time.time() - time_start}")
+            print("performing backward pass...")
+            loss_for_backward.backward()
+            print(f"finished loss backward: {time.time() - time_start}")
 
-        should_log = writer is not None and (
-            cfg.tb_log_interval > 0 and batch % cfg.tb_log_interval == 0
-        )
-        if should_log and writer is not None:
-            log_training_metrics(
-                writer=writer,
-                model=model,
-                optimizer=optimizer,
-                X=X,
-                y=y,
-                loss=loss,
-                loss_for_backward=loss_for_backward,
-                batch=batch,
-                cfg=cfg,
+            should_log = writer is not None and (
+                cfg.tb_log_interval > 0 and batch % cfg.tb_log_interval == 0
             )
+            if should_log and writer is not None:
+                log_training_metrics(
+                    writer=writer,
+                    model=model,
+                    optimizer=optimizer,
+                    X=X,
+                    y=y,
+                    loss=loss,
+                    loss_for_backward=loss_for_backward,
+                    batch=batch,
+                    cfg=cfg,
+                )
 
-        micro_step = batch + 1
-        if should_step_optimizer(micro_step, accum_steps, len(data_loader)):
-            print("optimizing...")
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
-            optimizer_steps += 1
-            print(f"finished optimizer step: {time.time() - time_start}")
-            if writer is not None:
-                writer.add_scalar("optim/step", optimizer_steps, batch)
+            micro_step = batch + 1
+            if should_step_optimizer(micro_step, accum_steps, len(data_loader)):
+                print("optimizing...")
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                optimizer_steps += 1
+                print(f"finished optimizer step: {time.time() - time_start}")
+                if writer is not None:
+                    writer.add_scalar("optim/step", optimizer_steps, batch)
 
-        time_end = time.time()
-        print(f"Time for 1 iteration: {time_end - time_start}")
-        if should_log and writer is not None:
-            writer.add_scalar("timing/iter_seconds", time_end - step_start, batch)
-        time_start = time.time()
+            time_end = time.time()
+            print(f"Time for 1 iteration: {time_end - time_start}")
+            if should_log and writer is not None:
+                writer.add_scalar("timing/iter_seconds", time_end - step_start, batch)
+            time_start = time.time()
 
 
 def finalize_writer(writer: Optional[SummaryWriter]) -> None:

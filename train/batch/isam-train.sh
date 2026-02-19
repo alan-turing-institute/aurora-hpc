@@ -37,6 +37,7 @@ MASTER_PORT=8334
 export MASTER_PORT
 
 python train.py \
-  --download_path "../../../datasets/era5/2023-01"
+  --download_path "../../../datasets/era5/2023-01" \
+  --epochs 20
 
 echo "Aurora fine-tuning finished"
