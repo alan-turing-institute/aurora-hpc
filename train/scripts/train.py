@@ -3,6 +3,7 @@
 import argparse
 import os
 import re
+import sys
 import time
 import warnings
 from dataclasses import dataclass
@@ -48,7 +49,7 @@ class RuntimeContext:
     master_port: Optional[str] = None
 
 
-def create_arg_parser() -> argparse.ArgumentParser:
+def parse_train_config() -> TrainConfig:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--xpu", action="store_true", help="boolean of whether to use xpu"
@@ -92,11 +93,7 @@ def create_arg_parser() -> argparse.ArgumentParser:
         default=32,
         help="Maximum dataset length used by AuroraDataset",
     )
-    return parser
-
-
-def parse_train_config(argv: Optional[Sequence[str]] = None) -> TrainConfig:
-    args = create_arg_parser().parse_args(argv)
+    args = parser.parse_args(sys.argv[1:])
     return TrainConfig(
         download_path=Path(args.download_path),
         xpu=args.xpu,
