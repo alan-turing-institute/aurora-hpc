@@ -36,11 +36,18 @@ export MASTER_ADDR
 MASTER_PORT=8334
 export MASTER_PORT
 
+RUN_TS="$(date +%Y%m%dT%H%M%S)"
+JOB_TAG="${SLURM_JOB_ID:-local}"
+TB_BASE_LOGDIR="${TB_BASE_LOGDIR:-runs/aurora_train}"
+TB_RUN_LOGDIR="${TB_BASE_LOGDIR}/${RUN_TS}_job${JOB_TAG}"
+echo "TensorBoard logdir: ${TB_RUN_LOGDIR}"
+
 python train.py \
   --download_path "../../../datasets/era5/2023-01" \
   --epochs 2 \
   --model_size "small" \
   --learning_rate 0.0001 \
   --target_global_batch 1 \
+  --tb_logdir "${TB_RUN_LOGDIR}"
 
 echo "Aurora fine-tuning finished"
