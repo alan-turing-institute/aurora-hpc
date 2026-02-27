@@ -1,6 +1,7 @@
 """Fine tune Aurora weather model."""
 
 import argparse
+import logging
 import os
 import re
 import sys
@@ -19,7 +20,7 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from aurora import Aurora
+from aurora import Aurora, AuroraHighRes, AuroraSmall
 from aurora_hpc.aurora_loss import mae
 from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
@@ -36,6 +37,10 @@ class TrainConfig:
     len_max: Optional[int]
     epochs: int
     learning_rate: float
+    model_size: str
+    checkpoint_repo: str
+    checkpoint_name: Optional[str]
+    timing_log_path: Optional[Path]
 
 
 @dataclass
@@ -108,6 +113,30 @@ def parse_train_config() -> TrainConfig:
         default=1e-3,  # Match Torch default
         help="Learning rate used by AdamW optimizer",
     )
+    parser.add_argument(
+        "--model_size",
+        choices=("base", "small", "highres"),
+        default="base",
+        help="Aurora model size to use",
+    )
+    parser.add_argument(
+        "--checkpoint_repo",
+        type=str,
+        default="microsoft/aurora",
+        help="HuggingFace repository for the model checkpoint",
+    )
+    parser.add_argument(
+        "--checkpoint_name",
+        type=str,
+        default=None,
+        help="Checkpoint filename; defaults depend on --model_size",
+    )
+    parser.add_argument(
+        "--timing_log_path",
+        type=Path,
+        default=None,
+        help="Optional file path for detailed per-batch timing logs",
+    )
     args = parser.parse_args(sys.argv[1:])
     return TrainConfig(
         download_path=Path(args.download_path),
@@ -120,6 +149,10 @@ def parse_train_config() -> TrainConfig:
         len_max=args.len_max,
         epochs=args.epochs,
         learning_rate=args.lr,
+        model_size=args.model_size,
+        checkpoint_repo=args.checkpoint_repo,
+        checkpoint_name=args.checkpoint_name,
+        timing_log_path=args.timing_log_path,
     )
 
 
@@ -188,23 +221,72 @@ def maybe_prepare_xpu_runtime(cfg: TrainConfig, ctx: RuntimeContext) -> None:
         os.environ["MASTER_PORT"] = ctx.master_port
 
 
-def build_model(cfg: TrainConfig, ctx: RuntimeContext) -> Aurora:
-    print(f"Start time loading model: {dt.now()}")
-    print("loading model...")
-    model = Aurora(
-        use_lora=False,
-        autocast=True,
+def setup_loggers(
+    cfg: TrainConfig, ctx: RuntimeContext
+) -> Tuple[logging.Logger, Optional[logging.Logger]]:
+    train_logger = logging.getLogger("aurora_hpc.train")
+    train_logger.setLevel(logging.INFO)
+    train_logger.propagate = False
+    if not train_logger.handlers:
+        train_handler = logging.StreamHandler()
+        train_handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+        )
+        train_logger.addHandler(train_handler)
+
+    timing_logger = None
+    if cfg.timing_log_path is not None and ctx.is_main_process:
+        timing_logger = logging.getLogger("aurora_hpc.timing")
+        timing_logger.setLevel(logging.INFO)
+        timing_logger.propagate = False
+        timing_logger.handlers.clear()
+        timing_handler = logging.FileHandler(cfg.timing_log_path)
+        timing_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
+        timing_logger.addHandler(timing_handler)
+        train_logger.info("Detailed timings will be written to %s", cfg.timing_log_path)
+    return train_logger, timing_logger
+
+
+def build_model(cfg: TrainConfig, ctx: RuntimeContext, logger: logging.Logger) -> Aurora:
+    logger.info("Start time loading model: %s", dt.now())
+    logger.info("Loading model")
+    model_size_to_checkpoint = {
+        "base": "aurora-0.25-pretrained.ckpt",
+        "small": "aurora-0.25-small-pretrained.ckpt",
+        "highres": "aurora-0.1-finetuned.ckpt",
+    }
+    checkpoint_name = cfg.checkpoint_name or model_size_to_checkpoint[cfg.model_size]
+
+    if cfg.model_size == "base":
+        model = Aurora(
+            use_lora=False,
+            autocast=True,
+        )
+    elif cfg.model_size == "small":
+        model = AuroraSmall(
+            autocast=True,
+        )
+    else:
+        model = AuroraHighRes(
+            autocast=True,
+        )
+
+    logger.info(
+        "Using model_size=%s checkpoint=%s/%s",
+        cfg.model_size,
+        cfg.checkpoint_repo,
+        checkpoint_name,
     )
-    model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
+    model.load_checkpoint(cfg.checkpoint_repo, checkpoint_name)
     model.to(ctx.device)
     model.configure_activation_checkpointing()
-    print(f"End time loading model: {dt.now()}")
+    logger.info("End time loading model: %s", dt.now())
     return model
 
 
-def build_data_loader(cfg: TrainConfig) -> DataLoader:
-    print(f"Start time loading data: {dt.now()}")
-    print("loading data...")
+def build_data_loader(cfg: TrainConfig, logger: logging.Logger) -> DataLoader:
+    logger.info("Start time loading data: %s", dt.now())
+    logger.info("Loading data")
     dataset = AuroraDataset(
         data_path=cfg.download_path,
         t=1,
@@ -213,7 +295,7 @@ def build_data_loader(cfg: TrainConfig) -> DataLoader:
         atmos_data=Path("2023-01-atmospheric-36.nc"),
         len_max=cfg.len_max,
     )
-    print(f"End time loading data: {dt.now()}")
+    logger.info("End time loading data: %s", dt.now())
     return DataLoader(
         dataset=dataset,
         batch_size=1,
@@ -281,6 +363,7 @@ def log_training_metrics(
     global_step: int,
     cfg: TrainConfig,
     histogram_skip_logged_once: bool,
+    logger: logging.Logger,
 ) -> bool:
     writer.add_scalar("train/loss", loss.detach().item(), global_step)
     writer.add_scalar(
@@ -380,9 +463,11 @@ def log_training_metrics(
                 writer.add_histogram(f"grad_hist/{name}", grad, global_step)
                 continue
             if not histogram_skip_logged_once:
-                print(
-                    "Skipping TensorBoard gradient histogram for "
-                    f"'{name}' at step {global_step}: {skip_reason}"
+                logger.warning(
+                    "Skipping TensorBoard gradient histogram for '%s' at step %s: %s",
+                    name,
+                    global_step,
+                    skip_reason,
                 )
                 histogram_skip_logged_once = True
     return histogram_skip_logged_once
@@ -395,40 +480,55 @@ def run_train_loop(
     data_loader: DataLoader,
     optimizer: torch.optim.Optimizer,
     writer: Optional[SummaryWriter],
+    logger: logging.Logger,
+    timing_logger: Optional[logging.Logger],
 ) -> None:
     accum_steps = compute_accum_steps(cfg.target_global_batch, ctx.world_size)
-    print(
-        f"Using gradient accumulation: accum_steps={accum_steps}, "
-        f"target_global_batch={cfg.target_global_batch}"
+    logger.info(
+        "Using gradient accumulation: accum_steps=%s, target_global_batch=%s",
+        accum_steps,
+        cfg.target_global_batch,
     )
     optimizer_steps = 0
     histogram_skip_logged_once = False
     optimizer.zero_grad(set_to_none=True)
-    time_start = time.time()
 
     for i in range(cfg.epochs):
         model.train()
         for batch, (X, y) in enumerate(data_loader):
             global_step = i * len(data_loader) + batch
             step_start = time.time()
-            print(f"batch {batch}...")
 
+            stage_start = time.time()
             y = y.to(ctx.device)
             X = X.to(ctx.device)
-            print(f"finished X and y to device: {time.time() - time_start}")
+            to_device_seconds = time.time() - stage_start
 
-            print("performing forward pass...")
+            stage_start = time.time()
             pred = model(X)
-            print(f"finished model forward: {time.time() - time_start}")
+            forward_seconds = time.time() - stage_start
 
-            print("calculating loss...")
+            stage_start = time.time()
             loss = mae(pred, y)
+            if not bool(torch.isfinite(loss).all().item()):
+                loss_value = float(loss.detach().item())
+                logger.error(
+                    "Encountered non-finite loss at epoch=%s batch=%s step=%s: loss=%s",
+                    i,
+                    batch,
+                    global_step,
+                    loss_value,
+                )
+                raise RuntimeError(
+                    "Stopping training because non-finite loss was detected "
+                    f"(epoch={i}, batch={batch}, step={global_step}, loss={loss_value})."
+                )
             loss_for_backward = loss / accum_steps
-            print(f"finished loss calc: {time.time() - time_start}")
+            loss_seconds = time.time() - stage_start
 
-            print("performing backward pass...")
+            stage_start = time.time()
             loss_for_backward.backward()
-            print(f"finished loss backward: {time.time() - time_start}")
+            backward_seconds = time.time() - stage_start
 
             should_log = writer is not None and (
                 cfg.tb_log_interval > 0 and batch % cfg.tb_log_interval == 0
@@ -445,25 +545,47 @@ def run_train_loop(
                     global_step=global_step,
                     cfg=cfg,
                     histogram_skip_logged_once=histogram_skip_logged_once,
+                    logger=logger,
                 )
 
             micro_step = batch + 1
+            optimizer_seconds = 0.0
+            did_step_optimizer = False
             if should_step_optimizer(micro_step, accum_steps, len(data_loader)):
-                print("optimizing...")
+                stage_start = time.time()
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
                 optimizer_steps += 1
-                print(f"finished optimizer step: {time.time() - time_start}")
+                did_step_optimizer = True
+                optimizer_seconds = time.time() - stage_start
                 if writer is not None:
                     writer.add_scalar("optim/step", optimizer_steps, global_step)
 
             time_end = time.time()
-            print(f"Time for 1 iteration: {time_end - time_start}")
-            if should_log and writer is not None:
-                writer.add_scalar(
-                    "timing/iter_seconds", time_end - step_start, global_step
+            iter_seconds = time_end - step_start
+            logger.info(
+                "epoch=%s batch=%s step=%s loss=%.6f optimizer_step=%s",
+                i,
+                batch,
+                global_step,
+                float(loss.detach().item()),
+                did_step_optimizer,
+            )
+            if timing_logger is not None:
+                timing_logger.info(
+                    "epoch=%s batch=%s step=%s to_device=%.3f forward=%.3f loss=%.3f backward=%.3f optimizer=%.3f total=%.3f",
+                    i,
+                    batch,
+                    global_step,
+                    to_device_seconds,
+                    forward_seconds,
+                    loss_seconds,
+                    backward_seconds,
+                    optimizer_seconds,
+                    iter_seconds,
                 )
-            time_start = time.time()
+            if should_log and writer is not None:
+                writer.add_scalar("timing/iter_seconds", iter_seconds, global_step)
 
 
 def finalize_writer(writer: Optional[SummaryWriter]) -> None:
@@ -474,13 +596,14 @@ def finalize_writer(writer: Optional[SummaryWriter]) -> None:
 
 
 def main(cfg: TrainConfig) -> None:
-    print(f"Script start time: {dt.now()}")
     ctx = resolve_runtime_context(cfg)
+    logger, timing_logger = setup_loggers(cfg, ctx)
+    logger.info("Script start time: %s", dt.now())
     maybe_prepare_xpu_runtime(cfg, ctx)
-    print(f"Using device={ctx.device}")
+    logger.info("Using device=%s", ctx.device)
 
-    model = build_model(cfg, ctx)
-    data_loader = build_data_loader(cfg)
+    model = build_model(cfg, ctx, logger)
+    data_loader = build_data_loader(cfg, logger)
     optimizer = build_optimizer(model, cfg)
     writer = setup_writer(cfg, ctx)
 
@@ -491,9 +614,11 @@ def main(cfg: TrainConfig) -> None:
         data_loader=data_loader,
         optimizer=optimizer,
         writer=writer,
+        logger=logger,
+        timing_logger=timing_logger,
     )
     finalize_writer(writer)
-    print("done")
+    logger.info("Done")
 
 
 if __name__ == "__main__":
