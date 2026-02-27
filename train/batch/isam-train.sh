@@ -38,7 +38,9 @@ export MASTER_PORT
 
 python train.py \
   --download_path "../../../datasets/era5/2023-01" \
-  --epochs 20 \
-  --model_size "${AURORA_MODEL_SIZE:-base}"
+  --epochs 2 \
+  --model_size "small" \
+  --learning_rate 0.0001 \
+  --target_global_batch 1 \
 
 echo "Aurora fine-tuning finished"
