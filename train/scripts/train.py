@@ -33,8 +33,9 @@ class TrainConfig:
     tb_log_interval: int
     tb_hist_interval: int
     target_global_batch: int
-    len_max: int
+    len_max: Optional[int]
     epochs: int
+    learning_rate: float
 
 
 @dataclass
@@ -91,7 +92,7 @@ def parse_train_config() -> TrainConfig:
     parser.add_argument(
         "--len_max",
         type=int,
-        default=32,
+        default=None,
         help="Maximum dataset length used by AuroraDataset",
     )
     parser.add_argument(
@@ -99,6 +100,13 @@ def parse_train_config() -> TrainConfig:
         type=int,
         default=1,
         help="Number of epochs to fine-tune for",
+    )
+    parser.add_argument(
+        "--lr",
+        "--learning_rate",
+        type=float,
+        default=1e-3,  # Match Torch default
+        help="Learning rate used by AdamW optimizer",
     )
     args = parser.parse_args(sys.argv[1:])
     return TrainConfig(
@@ -111,6 +119,7 @@ def parse_train_config() -> TrainConfig:
         target_global_batch=args.target_global_batch,
         len_max=args.len_max,
         epochs=args.epochs,
+        learning_rate=args.lr,
     )
 
 
@@ -213,8 +222,8 @@ def build_data_loader(cfg: TrainConfig) -> DataLoader:
     )
 
 
-def build_optimizer(model: Aurora) -> torch.optim.Optimizer:
-    return torch.optim.AdamW(model.parameters())
+def build_optimizer(model: Aurora, cfg: TrainConfig) -> torch.optim.Optimizer:
+    return torch.optim.AdamW(model.parameters(), lr=cfg.learning_rate)
 
 
 def setup_writer(cfg: TrainConfig, ctx: RuntimeContext) -> Optional[SummaryWriter]:
@@ -261,10 +270,9 @@ def log_training_metrics(
     y,
     loss: torch.Tensor,
     loss_for_backward: torch.Tensor,
-    batch: int,
+    global_step: int,
     cfg: TrainConfig,
 ) -> None:
-    global_step = batch
     writer.add_scalar("train/loss", loss.detach().item(), global_step)
     writer.add_scalar(
         "train/loss_scaled_for_backward",
@@ -353,7 +361,7 @@ def log_training_metrics(
             global_step,
         )
 
-    if cfg.tb_hist_interval > 0 and batch % cfg.tb_hist_interval == 0:
+    if cfg.tb_hist_interval > 0 and global_step % cfg.tb_hist_interval == 0:
         for name, param in model.named_parameters():
             if param.grad is not None:
                 writer.add_histogram(
@@ -381,6 +389,7 @@ def run_train_loop(
     for i in range(cfg.epochs):
         model.train()
         for batch, (X, y) in enumerate(data_loader):
+            global_step = i * len(data_loader) + batch
             step_start = time.time()
             print(f"batch {batch}...")
 
@@ -413,7 +422,7 @@ def run_train_loop(
                     y=y,
                     loss=loss,
                     loss_for_backward=loss_for_backward,
-                    batch=batch,
+                    global_step=global_step,
                     cfg=cfg,
                 )
 
@@ -425,12 +434,14 @@ def run_train_loop(
                 optimizer_steps += 1
                 print(f"finished optimizer step: {time.time() - time_start}")
                 if writer is not None:
-                    writer.add_scalar("optim/step", optimizer_steps, batch)
+                    writer.add_scalar("optim/step", optimizer_steps, global_step)
 
             time_end = time.time()
             print(f"Time for 1 iteration: {time_end - time_start}")
             if should_log and writer is not None:
-                writer.add_scalar("timing/iter_seconds", time_end - step_start, batch)
+                writer.add_scalar(
+                    "timing/iter_seconds", time_end - step_start, global_step
+                )
             time_start = time.time()
 
 
@@ -449,7 +460,7 @@ def main(cfg: TrainConfig) -> None:
 
     model = build_model(cfg, ctx)
     data_loader = build_data_loader(cfg)
-    optimizer = build_optimizer(model)
+    optimizer = build_optimizer(model, cfg)
     writer = setup_writer(cfg, ctx)
 
     run_train_loop(

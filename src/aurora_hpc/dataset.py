@@ -6,6 +6,7 @@
 
 # https://docs.pytorch.org/tutorials/beginner/basics/data_tutorial.html
 from pathlib import Path
+from typing import Optional
 
 import torch
 import xarray as xr
@@ -36,7 +37,7 @@ class AuroraDataset(Dataset):
         surface_data: str | Path | xr.Dataset = Path("2023-01-01-surface-level.nc"),
         atmos_data: str | Path | xr.Dataset = Path("2023-01-01-atmospheric.nc"),
         use_dask: bool = False,
-        len_max: int = None,
+        len_max: Optional[int] = None,
     ):
         self.t = t
 
