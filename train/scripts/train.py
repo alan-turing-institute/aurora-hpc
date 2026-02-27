@@ -262,6 +262,14 @@ def _batch_to_tensor(batch_obj) -> torch.Tensor:
     return torch.cat(tensors)
 
 
+def _histogram_skip_reason(t: torch.Tensor) -> Optional[str]:
+    if t.numel() == 0:
+        return "empty tensor (numel=0)"
+    if not bool(torch.isfinite(t).any().item()):
+        return "all values are non-finite (NaN/Inf)"
+    return None
+
+
 def log_training_metrics(
     writer: SummaryWriter,
     model: Aurora,
@@ -272,7 +280,8 @@ def log_training_metrics(
     loss_for_backward: torch.Tensor,
     global_step: int,
     cfg: TrainConfig,
-) -> None:
+    histogram_skip_logged_once: bool,
+) -> bool:
     writer.add_scalar("train/loss", loss.detach().item(), global_step)
     writer.add_scalar(
         "train/loss_scaled_for_backward",
@@ -363,10 +372,20 @@ def log_training_metrics(
 
     if cfg.tb_hist_interval > 0 and global_step % cfg.tb_hist_interval == 0:
         for name, param in model.named_parameters():
-            if param.grad is not None:
-                writer.add_histogram(
-                    f"grad_hist/{name}", param.grad.detach(), global_step
+            if param.grad is None:
+                continue
+            grad = param.grad.detach()
+            skip_reason = _histogram_skip_reason(grad)
+            if skip_reason is None:
+                writer.add_histogram(f"grad_hist/{name}", grad, global_step)
+                continue
+            if not histogram_skip_logged_once:
+                print(
+                    "Skipping TensorBoard gradient histogram for "
+                    f"'{name}' at step {global_step}: {skip_reason}"
                 )
+                histogram_skip_logged_once = True
+    return histogram_skip_logged_once
 
 
 def run_train_loop(
@@ -383,6 +402,7 @@ def run_train_loop(
         f"target_global_batch={cfg.target_global_batch}"
     )
     optimizer_steps = 0
+    histogram_skip_logged_once = False
     optimizer.zero_grad(set_to_none=True)
     time_start = time.time()
 
@@ -414,7 +434,7 @@ def run_train_loop(
                 cfg.tb_log_interval > 0 and batch % cfg.tb_log_interval == 0
             )
             if should_log and writer is not None:
-                log_training_metrics(
+                histogram_skip_logged_once = log_training_metrics(
                     writer=writer,
                     model=model,
                     optimizer=optimizer,
@@ -424,6 +444,7 @@ def run_train_loop(
                     loss_for_backward=loss_for_backward,
                     global_step=global_step,
                     cfg=cfg,
+                    histogram_skip_logged_once=histogram_skip_logged_once,
                 )
 
             micro_step = batch + 1
