@@ -1,6 +1,6 @@
 #!/bin/bash
 # vim: et:ts=4:sts=4:sw=4
-#SBATCH --time 1:00:0
+#SBATCH --time 10:00:0
 #SBATCH --gpus 1
 
 echo

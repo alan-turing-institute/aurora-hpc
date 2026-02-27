@@ -27,13 +27,14 @@ from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 @dataclass
 class TrainConfig:
     download_path: Path
-    xpu: bool = False
-    shard: bool = False
-    tb_logdir: str = "runs/aurora_train"
-    tb_log_interval: int = 1
-    tb_hist_interval: int = 50
-    target_global_batch: int = 8
-    len_max: int = 32
+    xpu: bool
+    shard: bool
+    tb_logdir: str
+    tb_log_interval: int
+    tb_hist_interval: int
+    target_global_batch: int
+    len_max: int
+    epochs: int
 
 
 @dataclass
@@ -378,6 +379,7 @@ def run_train_loop(
     time_start = time.time()
 
     for i in range(cfg.epochs):
+        model.train()
         for batch, (X, y) in enumerate(data_loader):
             step_start = time.time()
             print(f"batch {batch}...")
