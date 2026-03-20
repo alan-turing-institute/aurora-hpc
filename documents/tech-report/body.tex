@@ -63,7 +63,7 @@ Each section is prefaced with a brief list summarising our conclusions from the 
     \item Using multi-node and multi-GPU training, Dawn consistently ran approximately three times slower than Baskerville.
     \item Slower Dawn performance can be partially attributed to the need to use \textit{composite} device hierarchy on Dawn with a two times performance hit. Model sharding would likely be one approach to mitigating this.
     \item The CPU to GPU/XPU bandwidth on Dawn is consistently higher than on Baskerville by a factor of up to 4.4 times.
-    \item Filesystem performance depends on caching, with Baskerville having faster un-cached reads (call 1) and Dawn having faster cached reads (call 3).
+    \item Filesystem performance depends on caching, with Baskerville having faster un-cached reads and Dawn having faster cached reads.
     \item Measuring floating point matrix operation errors showed better accuracy using \fpsingle\ on Baskerville, better accuracy using \fphalf\ on Dawn and identical results across the two systems for \bfhalf.
     \item We experienced some reliability issues due to data centre upgrades with Dawn.
     \item We received timely support from the Dawn team throughout.
@@ -108,15 +108,15 @@ For our purposes the crucial difference between the two is that in {\it flat} mo
 
 \subsubsection{Python environment}
 
-On Dawn, we installed Aurora using a virtual environment with Python 3.11.9, microsoft-aurora v1.5.1, PyTorch 2.7.0 and \href{https://pytorch-extension.intel.com/installation?platform=gpu&version=v2.7.10%2Bxpu&os=linux%2Fwsl2&package=pip}{Intel Extension for PyTorch} v2.7.10+xpu (a.k.a. ``ipex''). 
-The ipex library is necessary because, until recently, PyTorch did not support Intel GPUs out of the box. 
+On Dawn, we installed Aurora using a virtual environment with Python 3.11.9, microsoft-aurora v1.5.1, PyTorch 2.7.0 and \href{https://pytorch-extension.intel.com/installation?platform=gpu&version=v2.7.10%2Bxpu&os=linux%2Fwsl2&package=pip}{Intel Extension for PyTorch} v2.7.10+xpu (a.k.a. ``ipex'').
+The ipex library is necessary because, until recently, PyTorch did not support Intel GPUs out of the box.
 For single-GPU usage, only ipex is necessary. For multi-GPU work, the oneCCL Bindings for PyTorch library is also needed for collective communications. This is Intel's equivalent of \href{https://developer.nvidia.com/nccl}{NVIDIA's NCCL}.
 
 Recent versions of PyTorch have introduced native support for Intel XPUs, including the XCCL distributed backend in \href{https://pytorch.org/blog/pytorch-2-8/}{PyTorch 2.8}. These changes were too recent to be used in this report, but our experience has been that the dependencies and setup required are greatly simplified with these newer versions of PyTorch.
 
 \subsubsection{Modules}
 
-As is common on HPC systems, Dawn uses environment modules to add or remove packages from the environment, applied using the \href{https://hpc-wiki.info/hpc/index.php?title=Modules&oldid=5007}{{\tt module} tool}. In order to use the oneCCL Python package, we needed to load some of the \href{https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit.html#gs.mqrwie}{OneAPI Toolkit}, which is a collection of tools and libraries for working with Intel hardware. 
+As is common on HPC systems, Dawn uses environment modules to add or remove packages from the environment, applied using the \href{https://hpc-wiki.info/hpc/index.php?title=Modules&oldid=5007}{{\tt module} tool}. In order to use the oneCCL Python package, we needed to load some of the \href{https://www.intel.com/content/www/us/en/developer/tools/oneapi/base-toolkit.html#gs.mqrwie}{OneAPI Toolkit}, which is a collection of tools and libraries for working with Intel hardware.
 
 We loaded the following modules:
 \begin{enumerate}
@@ -139,7 +139,7 @@ On Dawn, we used the pvc-9 partition. This used the Rocky Linux 9.6 (Blue Onyx) 
 
 Since one of the aims of this work is to compare the deployment of Aurora on Dawn with deployment on a more traditional CUDA-based system, we use the Baskerville Tier 2 High Performance Computer system as a comparison.
 
-Baskerville hardware is detailed in the \href{https://docs.baskerville.ac.uk/system/}{Baskerville documentation}. 
+Baskerville hardware is detailed in the \href{https://docs.baskerville.ac.uk/system/}{Baskerville documentation}.
 
 Baskerville offers NVIDIA A100 GPUs; we used the 80 GiB variants of these to ensure we had enough memory to perform fine-tuning of Aurora. Each node has four such GPUs and 2 $\times$ Intel\textsuperscript{\tiny\textregistered} Xeon\textsuperscript{\tiny\textregistered} Platinum 8360Y CPUs, giving a total of 72 cores at 2.4 GHz (with boost to 3.5 GHz) and 512 GiB RAM (16 $\times$ 32 GiB DDR4).
 
@@ -161,7 +161,7 @@ On Baskerville we loaded the following modules:
 
 \subsection{ERA5 dataset}
 
-We downloaded data from the \href{https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview}{ERA5} dataset as per the \href{https://microsoft.github.io/aurora/example_era5.html}{Aurora documentation}. 
+We downloaded data from the \href{https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview}{ERA5} dataset as per the \href{https://microsoft.github.io/aurora/example_era5.html}{Aurora documentation}.
 
 We downloaded 9 days' worth of data at 6 hour time-steps (36 time-steps total) from 2023-01-01 to 2023-01-09 and at times of 00:00, 06:00, 12:00 and 18:00. This dataset took up around 3.6 GiB (3.63 GiB) on disk as netCDF files. The variables provided are the following:
 
@@ -193,7 +193,7 @@ In this section we will establish the following:
 
 \subsection{Experimental setup}
 
-We ran inference using the ERA5 dataset as per the \href{https://microsoft.github.io/aurora/usage.html}{Aurora documentation}. 
+We ran inference using the ERA5 dataset as per the \href{https://microsoft.github.io/aurora/usage.html}{Aurora documentation}.
 
 We ran this for 28 steps (7 days), using the default 6 hour time-step, starting from the two data points at 2023-01-01 00:00 and 06:00. We used the Aurora checkpoint {\tt aurora-0.25-pretrained.ckpt} available from \href{https://huggingface.co/microsoft/aurora}{Hugging Face}. We repeated this 4 times on both Dawn and Baskerville and calculated an average of these for plotting.
 
@@ -202,10 +202,10 @@ On Dawn, we were able to run inference using both \textit{flat} and \textit{comp
 \subsection{Results}
 \label{section:results}
 
-We compared our Dawn inference results with Baskerville and plotted the results. These can be seen in Figures \ref{fig:pvg-Dawn}--\ref{fig:errors}. 
+We compared our Dawn inference results with Baskerville and plotted the results. These can be seen in Figures \ref{fig:pvg-Dawn}--\ref{fig:errors}.
 
 The left-hand plots of figures \ref{fig:pvg-Dawn} and \ref{fig:pvg-bask} show the predicted two-meter temperature after a 7 day rollout on Dawn and Baskerville, respectively. The right-hand sides of these figures show the ground truth values, taken from the ERA5 dataset.
-From these, we can see both sets of predicted values look very similar, suggesting that both Dawn and Baskerville have generated very similar results. 
+From these, we can see both sets of predicted values look very similar, suggesting that both Dawn and Baskerville have generated very similar results.
 
 We can quantify these results more accurately by calculating the Root Mean Square Error (RMSE) across the two systems and between the two systems. In Figure \ref{fig:errors} we perform a four-way comparison. The top row shows the error between the predicted values and ground truth for two-meter surface temperature after a 7 day rollout on Dawn (left) and Baskerville (right). The colour scale is between 0 and 5 degrees Kelvin. The bottom row shows the RMSE between the two sets of predicted values (Dawn and Baskerville) and the two sets of ground truth values.
 
@@ -353,7 +353,7 @@ We then moved on to test fine-tuning across multiple GPUs on the same node using
 
 We then created a \href{https://docs.pytorch.org/tutorials/beginner/basics/data_tutorial.html#creating-a-custom-dataset-for-your-files}{custom Dataset class} and used the PyTorch {\tt DistributedSampler} to take advantage of DDP by splitting our dataset across the different workers. Again, we set our device hierarchy to \textit{composite}. We found that we could run multi-GPU fine-tuning with this set up.
 
-We proceeded to run fine-tuning on both Dawn and Baskerville using 34 time-steps (8.5 days). Since two time-steps are used as input, this equated to 32 iterations per epoch. 
+We proceeded to run fine-tuning on both Dawn and Baskerville using 34 time-steps (8.5 days). Since two time-steps are used as input, this equated to 32 iterations per epoch.
 
 \subsubsection{Distributed Data Parallel (DDP)}
 \label{section:time-comparison}
@@ -494,7 +494,7 @@ It's also worth noting that running on the 80 GiB A100 nodes on Baskerville, mod
   2& 2& N/A (Bask)& 3.25& 1.62&104.85\\
   4& 4& N/A (Bask)&  3.29& 0.82&81.72\\
     \end{tabular}
-    \caption{Comparison of fine-tuning timings on Dawn using 1 node and \textit{flat vs. composite} hierarchies and Baskerville.} 
+    \caption{Comparison of fine-tuning timings on Dawn using 1 node and \textit{flat vs. composite} hierarchies and Baskerville.}
     \label{tab:flat-vs-composite-Dawn}
 \end{table}
 
@@ -506,7 +506,7 @@ More information on multi-stack architectures can be found in the Intel oneAPI o
 
 \subsubsection{Fully Sharded Data Parallel (FSDP)}
 
-With the \texttt{FULL\_SHARD} strategy, we have been able to reduce maximum GPU memory utilisation from approximately 66\% to 55\%. This uses a \texttt{ModuleWrapPolicy} to shard the encoder/decoder layers. 
+With the \texttt{FULL\_SHARD} strategy, we have been able to reduce maximum GPU memory utilisation from approximately 66\% to 55\%. This uses a \texttt{ModuleWrapPolicy} to shard the encoder/decoder layers.
 
 Attempts to shard more layer types have been found to give errors such as ``Inconsistent compute device and \texttt{device\_id} on rank 1: xpu:0 vs xpu:1''.  Attempts to use FSDPv2's \texttt{fully\_shard} wrapper function have resulted in \texttt{UR\_RESULT\_ERROR\_OUT\_OF\_RESOURCES} errors. Therefore, some further work is needed to understand how much more optimisation can be found with model and optimiser sharding.
 
@@ -526,7 +526,7 @@ In the remainder of this section we will go on to show the following results.
 
 \begin{enumerate}
 \item The CPU to GPU/XPU bandwidth on Dawn is consistently higher than on Baskerville by a factor of up to 4.4 times.
-\item The filesystem performance depends on caching, with Baskerville having faster un-cached reads (call 1) and Dawn having faster cached reads (call 3).
+\item The filesystem performance depends on caching, with Baskerville having faster un-cached reads and Dawn having faster cached reads.
 \end{enumerate}
 
 \subsection{Results}
@@ -555,9 +555,9 @@ Using the \texttt{dd} command to read ERA5 files gives us some sense of the file
     \centering
     \hbadness=99999
     \begin{tabular}{rrrr}
-          File Size (MiB) & Call & Dawn Bandwidth (GiB/s) & Bask Bandwidth (GiB/s) \\ \hline
-           423 & 1 & 0.5 & 1.7 \\
-   423 & 3 & 7 & 5.5 \\
+         \parbox{3cm}{File Size (MiB) \\ \,} & \parbox{3cm}{Cached (Y/N) \\ \,} & \parbox{3.5cm}{Dawn Bandwidth (GiB/s)} &  \parbox{3.3cm}{Bask Bandwidth (GiB/s)} \\ \hline
+           423 & N & 0.5 & 1.7 \\
+   423 & Y & 7 & 5.5 \\
     \end{tabular}
     \caption{Comparison of file-system bandwidth.}
     \label{tab:file-system-bandwidth}
@@ -569,7 +569,7 @@ Using an ERA5 dataset containing 7 days' worth of data, we tested the time it to
 
 On Dawn, with device hierarchy set to \textit{composite}, we found that loading this dataset from disk (Lustre) to RAM took 25.6 seconds, roughly equivalent to 3.4 GiB / 25.6 s = 0.13 GiB s\textsuperscript{-1}. The average time to move each batch of training data from RAM to XPU was 0.0002 seconds, giving a total time of 0.0002 $\times$ 28 = 0.0056 s for all batches. This is roughly equivalent to 3.4 GiB / 0.0056 s = 607 GiB s\textsuperscript{-1} (assuming the full dataset is used during training).
 
-On Baskerville, we found that loading this dataset from disk to RAM took 37.3 seconds, roughly equivalent to 3.4 GiB / 37.3 seconds = 0.09 GiB s\textsuperscript{-1}. The average time to move each batch of training data from RAM to GPU was 0.082 s, giving a total time of 0.082 $\times$ 28 = 2.296 s for all batches. This is roughly equivalent to 3.4 GiB / 2.296 s = 1.48 GiB s\textsuperscript{-1} (assuming the full dataset is used during training). 
+On Baskerville, we found that loading this dataset from disk to RAM took 37.3 seconds, roughly equivalent to 3.4 GiB / 37.3 seconds = 0.09 GiB s\textsuperscript{-1}. The average time to move each batch of training data from RAM to GPU was 0.082 s, giving a total time of 0.082 $\times$ 28 = 2.296 s for all batches. This is roughly equivalent to 3.4 GiB / 2.296 s = 1.48 GiB s\textsuperscript{-1} (assuming the full dataset is used during training).
 
 These timings suggest data transfer both from disk to RAM and from RAM to GPU/XPU are faster on Dawn, in agreement with the results above. Notably, however, RAM to XPU transfer times seem to be approximately 410 times quicker on Dawn versus Baskerville. This may suggest an error in our code or calculation of RAM to XPU transfer time as this seems exceedingly fast.
 
@@ -627,7 +627,7 @@ It's worth reiterating that the operations were arranged so that the elements of
 
 We would also expect greater errors to be introduced during the addition operation rather than the multiplication operation, especially as the values in $A$ start to fall outside the range of the significand for the given floating point format (in contrast multiplication can compensate relatively by adjusting the exponent).
 
-For \bfhalf\ matrix operations we see almost identical results between Dawn and Baskerville. 
+For \bfhalf\ matrix operations we see almost identical results between Dawn and Baskerville.
 
 Given these results it's perhaps most surprising that we see identical cumulative errors for \bfhalf\ across the two GPUs. It could be that Dawn and Baskerville use different algorithms for \fphalf\ and \fpsingle, but identical or very similar algorithms for \bfhalf.
 
@@ -726,7 +726,7 @@ For each configuration of nodes and GPUs we calculate the $U$ statistic as being
 
 $$
 U_1 = n_1 n_2 + \frac{n_1 (n_1 + 1)}{2} - \sum_{x \in S_1} \operatorname{rank}(x)
-\  \text{ and } \ 
+\  \text{ and } \
 U_2 = n_1 n_2 + \frac{n_2 (n_2 + 1)}{2} - \sum_{x \in S_2} \operatorname{rank}(x),
 $$
 
