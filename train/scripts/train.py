@@ -97,9 +97,9 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         device_type = "cuda"
 
     time_start_total = time.time()
-    print(f"Script start time: {dt.now()}")
+    print(f"[{LOCAL_RANK}] Script start time: {dt.now()}")
 
-    print("Initialising process group with backend", comms_backend, flush=True)
+    print("[{LOCAL_RANK}] Initialising process group with backend", comms_backend, flush=True)
     # ToDo Run 2 or more processes.
     init_process_group(
         world_size=int(WORLD_SIZE),
@@ -108,10 +108,10 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     )
 
     device = f"{device_type}:{LOCAL_RANK}"
-    print(f"Using {device=}")
+    print(f"[{LOCAL_RANK}] Using {device=}")
 
-    print(f"Start time loading model: {dt.now()}")
-    print("loading model...")
+    print(f"[{LOCAL_RANK}] Start time loading model: {dt.now()}")
+    print("[{LOCAL_RANK}] loading model...")
     model = Aurora(
         use_lora=False,  # Model was not fine-tuned.
         autocast=True,  # Use AMP.
@@ -119,7 +119,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     model.load_checkpoint("microsoft/aurora", "aurora-0.25-pretrained.ckpt")
     if not xpu:
         torch.cuda.set_device(LOCAL_RANK)
-    print(f"End time loading model: {dt.now()}")
+    print(f"[{LOCAL_RANK}] End time loading model: {dt.now()}")
 
     download_path = Path(download_path)
 
@@ -127,7 +127,7 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         {Swin3DTransformerBackbone, Basic3DEncoderLayer, Basic3DDecoderLayer}
     )
 
-    print("preparing model...")
+    print("[{LOCAL_RANK}] preparing model...")
     model.configure_activation_checkpointing()
     model = FSDP(
         model,
@@ -144,8 +144,8 @@ def main(download_path: str, shard: bool, xpu: bool = False):
     optimizer = torch.optim.AdamW(model.parameters())
 
     time_start_loading_data = time.time()
-    print(f"Start time loading data: {dt.now()}")
-    print("loading data...")
+    print(f"[{LOCAL_RANK}] Start time loading data: {dt.now()}")
+    print("[{LOCAL_RANK}] loading data...")
     dataset = AuroraDataset(
         data_path=download_path,
         t=1,
@@ -154,8 +154,8 @@ def main(download_path: str, shard: bool, xpu: bool = False):
         atmos_data=Path("2023-01-atmospheric-34.nc"),
     )
     time_end_loading_data = time.time()
-    print(f"End time loading data: {dt.now()}")
-    print(f"Time loading data: {time_end_loading_data - time_start_loading_data}")
+    print(f"[{LOCAL_RANK}] End time loading data: {dt.now()}")
+    print(f"[{LOCAL_RANK}] Time loading data: {time_end_loading_data - time_start_loading_data}")
 
     sampler = DistributedSampler(dataset)
     data_loader = DataLoader(
@@ -172,39 +172,39 @@ def main(download_path: str, shard: bool, xpu: bool = False):
 
     time_start = time.time()
     for batch, (X, y) in enumerate(data_loader):
-        print(f"batch {batch}...")
+        print(f"[{LOCAL_RANK}] batch {batch}...")
 
         optimizer.zero_grad()
 
         with torch.autocast(device_type=device_type):
-            print("performing forward pass...")
+            print("[{LOCAL_RANK}] performing forward pass...")
             pred = model(X)
-            print(f"finished model forward: {time.time()-time_start}")
+            print(f"[{LOCAL_RANK}] finished model forward: {time.time()-time_start}")
 
             # only one of these is necessary
             pred = pred.to(device)
-            print(f"finished pred to device: {time.time()-time_start}")
+            print(f"[{LOCAL_RANK}] finished pred to device: {time.time()-time_start}")
             y = y.to(device)
-            print(f"finished y to device: {time.time()-time_start}")
+            print(f"[{LOCAL_RANK}] finished y to device: {time.time()-time_start}")
 
             # mean absolute error of one variable
-            print("calculating loss...")
+            print("[{LOCAL_RANK}] calculating loss...")
 
             # Todo: Are pred's of type PyTree and does it matter?
             loss = mae(pred, y)
-            print(f"finished loss calc: {time.time()-time_start}")
+            print(f"[{LOCAL_RANK}] finished loss calc: {time.time()-time_start}")
         
-        print("performing backward pass...")
+        print("[{LOCAL_RANK}] performing backward pass...")
         loss.backward()
-        print(f"finished loss backward: {time.time()-time_start}")
+        print(f"[{LOCAL_RANK}] finished loss backward: {time.time()-time_start}")
 
         if batch % n_batches_per_optim == 0:
-            print("optimizing...")
+            print("[{LOCAL_RANK}] optimizing...")
             optimizer.step()
-            print(f"finished optimizer step: {time.time()-time_start}")
+            print(f"[{LOCAL_RANK}] finished optimizer step: {time.time()-time_start}")
 
         time_end = time.time()
-        print(f"Time for 1 iteration: {time_end - time_start}")
+        print(f"[{LOCAL_RANK}] Time for 1 iteration: {time_end - time_start}")
         times.append(time_end - time_start)
         time_start = time.time()
 

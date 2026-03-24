@@ -2,11 +2,12 @@
 # vim: et:ts=4:sts=4:sw=4
 #SBATCH --qos turing
 #SBATCH --account usjs9456-ati-test
-#SBATCH --time 1:00:0
+#SBATCH --time 0:30:0
 #SBATCH --nodes 1
 #SBATCH --ntasks-per-node 1
 #SBATCH --gpus-per-node 4
-#SBATCH --mem 65536
+#SBATCH --cpus-per-gpu 36
+#SBATCH --mem 0
 #SBATCH --constraint=a100_80
 #SBATCH --job-name aurora-train
 #SBATCH --output results/one_node_four_gpus.txt
