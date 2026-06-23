@@ -345,7 +345,7 @@ We defined our loss function (${\mathcal{L}}({\widehat{X}}^{t},{X}^{t})$) as per
 & \quad + \left.\beta \left(\mathop{\sum }\limits_{k=1}^{{V}_{{\rm{A}}}}\frac{1}{C\times H\times W}\mathop{\sum }\limits_{c=1}^{C}{w}_{k,c}^{{\rm{A}}}\mathop{\sum }\limits_{i=1}^{H}\mathop{\sum }\limits_{j=1}^{W}| {\widehat{A}}_{k,c,i,j}^{t}-{A}_{k,c,i,j}^{t}| \right)\right].
 \end{align*}
 
-Here $\gamma$ is a dataset-specific weight, ${V}_{{\rm{S}}}$ and ${V}_{{\rm{A}}}$ are the number of surface-level and atmospheric-level variables, respectively; $\alpha$ and $\beta$ are weights for the surface-level and atmospheric-level components of the loss, respectively; $H$ and $W$ are latitude and longitude coordinates, respectively; $C$ is the number of atmospheric pressure levels; ${w}_{k}^{{\rm{S}}}$ is the weight associated with surface-level variable $k$ and ${w}_{k,c}^{{\rm{A}}}$ is the weight associated with atmospheric variable $k$ at pressure level $c$.
+Here $\gamma$ is a dataset-specific weight, ${V}_{{\rm{S}}}$ and ${V}_{{\rm{A}}}$ are the number of surface-level and atmospheric-level variables, respectively; $\alpha$ and $\beta$ are weights for the surface-level and atmospheric-level components of the loss, respectively; $H$ and $W$ are the number of latitude and longitude coordinates, respectively; $C$ is the number of atmospheric pressure levels; ${w}_{k}^{{\rm{S}}}$ is the weight associated with surface-level variable $k$ and finally ${w}_{k,c}^{{\rm{A}}}$ is the weight associated with atmospheric variable $k$ at pressure level $c$.
 
 \subsection{Results}
 
