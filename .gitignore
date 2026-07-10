@@ -3,6 +3,15 @@ weather.sh
 *.pkl
 ignore/
 
+# JASMIN working artifacts and symlinks
+jasmin/checkpoints/
+jasmin/runs/
+jasmin/eval_results/
+jasmin/slurm_logs/
+jasmin/data
+jasmin/mamba-env
+jasmin/gpu-env
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
