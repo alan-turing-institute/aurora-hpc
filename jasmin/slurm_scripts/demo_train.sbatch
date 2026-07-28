@@ -15,7 +15,7 @@
 # checkpoint directory and a demo TensorBoard log directory.
 
 # Move to the root of the repo.
-cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/..
+#cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/..
 
 export LD_LIBRARY_PATH="$PWD/gpu-env/lib"
 export PYTHONUNBUFFERED=1

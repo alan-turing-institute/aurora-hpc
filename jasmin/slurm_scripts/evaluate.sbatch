@@ -16,9 +16,6 @@
 # Extra arguments are passed straight to evaluate.py, e.g.
 #   sbatch slurm_scripts/evaluate.sbatch --steps 8 --inits 0,32
 
-# Move to the root of the repo.
-cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"/..
-
 export LD_LIBRARY_PATH="$PWD/mamba-env/lib"
 export PYTHONUNBUFFERED=1
 

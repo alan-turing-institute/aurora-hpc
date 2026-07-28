@@ -1,6 +1,7 @@
 """Fine tune Aurora weather model."""
 
 import argparse
+import json
 import logging
 import time
 import warnings
@@ -138,6 +139,107 @@ def log_memory(
         f"children={memory['children']:.1f} MiB across {int(memory['children_count'])} "
         f"processes, total={memory['total']:.1f} MiB"
     )
+    return memory
+
+
+def maybe_synchronize(device: torch.device) -> None:
+    if device.type == "cuda":
+        torch.cuda.synchronize(device)
+
+
+def gpu_memory_usage_mib(device: torch.device) -> dict[str, float]:
+    if device.type != "cuda":
+        return {
+            "allocated": 0.0,
+            "reserved": 0.0,
+            "max_allocated": 0.0,
+            "max_reserved": 0.0,
+        }
+    return {
+        "allocated": torch.cuda.memory_allocated(device) / BYTES_PER_MIB,
+        "reserved": torch.cuda.memory_reserved(device) / BYTES_PER_MIB,
+        "max_allocated": torch.cuda.max_memory_allocated(device) / BYTES_PER_MIB,
+        "max_reserved": torch.cuda.max_memory_reserved(device) / BYTES_PER_MIB,
+    }
+
+
+def log_gpu_memory(
+    writer: SummaryWriter,
+    step: int,
+    device: torch.device,
+    *,
+    prefix: str = "gpu_memory",
+    message_prefix: str = "gpu memory",
+) -> None:
+    if device.type != "cuda":
+        return
+    memory = gpu_memory_usage_mib(device)
+    writer.add_scalar(f"{prefix}/allocated_mib", memory["allocated"], step)
+    writer.add_scalar(f"{prefix}/reserved_mib", memory["reserved"], step)
+    writer.add_scalar(f"{prefix}/max_allocated_mib", memory["max_allocated"], step)
+    writer.add_scalar(f"{prefix}/max_reserved_mib", memory["max_reserved"], step)
+    LOGGER.info(
+        f"{message_prefix}: allocated={memory['allocated']:.1f} MiB, "
+        f"reserved={memory['reserved']:.1f} MiB, "
+        f"max_allocated={memory['max_allocated']:.1f} MiB, "
+        f"max_reserved={memory['max_reserved']:.1f} MiB"
+    )
+
+
+def log_step_perf(
+    writer: SummaryWriter,
+    step: int,
+    *,
+    data_wait_seconds: float,
+    forward_seconds: float,
+    backward_step_seconds: float,
+    step_seconds: float,
+    prefix: str = "perf",
+) -> None:
+    writer.add_scalar(f"{prefix}/data_wait_seconds", data_wait_seconds, step)
+    writer.add_scalar(f"{prefix}/forward_seconds", forward_seconds, step)
+    writer.add_scalar(f"{prefix}/backward_step_seconds", backward_step_seconds, step)
+    writer.add_scalar(f"{prefix}/step_seconds", step_seconds, step)
+    writer.add_scalar(f"{prefix}/steps_per_second", 1.0 / step_seconds, step)
+
+
+def summarize_run(
+    *,
+    device: str,
+    epochs: int,
+    max_steps: int | None,
+    total_steps: int,
+    model_load_seconds: float,
+    data_load_seconds: float,
+    iteration_seconds: list[float],
+    total_seconds: float,
+    peak_host_rss_mib: float,
+    peak_gpu_allocated_mib: float | None,
+    peak_gpu_reserved_mib: float | None,
+    warmup_iterations: int = 1,
+) -> dict:
+    timed_iterations = iteration_seconds[warmup_iterations:]
+    if timed_iterations:
+        avg_iteration_seconds = sum(timed_iterations) / len(timed_iterations)
+        steps_per_second = 1.0 / avg_iteration_seconds
+    else:
+        avg_iteration_seconds = None
+        steps_per_second = None
+    return {
+        "device": device,
+        "epochs": epochs,
+        "max_steps": max_steps,
+        "total_steps": total_steps,
+        "model_load_seconds": model_load_seconds,
+        "data_load_seconds": data_load_seconds,
+        "avg_iteration_seconds": avg_iteration_seconds,
+        "steps_per_second": steps_per_second,
+        "total_seconds": total_seconds,
+        "peak_host_rss_mib": peak_host_rss_mib,
+        "peak_gpu_allocated_mib": peak_gpu_allocated_mib,
+        "peak_gpu_reserved_mib": peak_gpu_reserved_mib,
+        "generated_at": dt.now().isoformat(timespec="seconds"),
+    }
 
 
 def main(
@@ -153,6 +255,8 @@ def main(
     use_lora: bool = False,
     use_gpu: bool = False,
     use_chunk_and_check: bool = False,
+    max_steps: int | None = None,
+    skip_checkpoint: bool = False,
 ):
 
     time_start_total = time.time()
@@ -167,6 +271,7 @@ def main(
             "--gpu is only for non-DeepSpeed training; launch with DeepSpeed instead."
         )
 
+    time_start_loading_model = time.time()
     LOGGER.info("Start time loading model: %s", dt.now())
     if small:
         LOGGER.info("loading small model...")
@@ -179,6 +284,8 @@ def main(
             use_lora=use_lora, use_chunked_checkpointing=use_chunk_and_check
         )
     model.load_checkpoint(strict=not use_lora)
+    time_end_loading_model = time.time()
+    model_load_seconds = time_end_loading_model - time_start_loading_model
     LOGGER.info("End time loading model: %s", dt.now())
 
     if use_lora:
@@ -275,10 +382,9 @@ def main(
     LOGGER.info("loading data...")
     dataset = AuroraDataset(data_path=download_path, t=1, use_dask=True)
     time_end_loading_data = time.time()
+    data_load_seconds = time_end_loading_data - time_start_loading_data
     LOGGER.info("End time loading data: %s", dt.now())
-    LOGGER.info(
-        "Time loading data: %ss", time_end_loading_data - time_start_loading_data
-    )
+    LOGGER.info("Time loading data: %ss", data_load_seconds)
 
     data_loader = DataLoader(
         dataset=dataset,
@@ -292,36 +398,56 @@ def main(
         ),
     )
     num_batches = len(data_loader)
+    batches_per_epoch = min(num_batches, max_steps) if max_steps else num_batches
     remaining_epochs = max(epochs - start_epoch, 0)
-    total_steps = remaining_epochs * num_batches
+    total_steps = remaining_epochs * batches_per_epoch
     LOGGER.info("Planned epochs: %s", epochs)
     LOGGER.info(
         "Starting epoch: %s", start_epoch + 1 if remaining_epochs else epochs + 1
     )
     LOGGER.info("Remaining epochs: %s", remaining_epochs)
-    LOGGER.info("Planned batches per epoch: %s", num_batches)
+    LOGGER.info("Planned batches per epoch: %s", batches_per_epoch)
     LOGGER.info("Planned remaining optimizer steps: %s", total_steps)
     LOGGER.info("Checkpoint directory: %s", checkpoint_dir)
 
     times = []
+    peak_host_rss_mib = 0.0
 
     with SummaryWriter(log_dir=log_dir) as writer:
-        log_memory(writer, global_step, message_prefix="initial memory")
+        peak_host_rss_mib = max(
+            peak_host_rss_mib,
+            log_memory(writer, global_step, message_prefix="initial memory")["total"],
+        )
+        log_gpu_memory(writer, global_step, device, message_prefix="initial gpu memory")
         for epoch in range(start_epoch, epochs):
             LOGGER.info("epoch %s/%s...", epoch + 1, epochs)
             epoch_losses = []
             epoch_start = time.time()
-            log_memory(
+            peak_host_rss_mib = max(
+                peak_host_rss_mib,
+                log_memory(
+                    writer,
+                    global_step,
+                    message_prefix=f"epoch {epoch + 1} start memory",
+                )["total"],
+            )
+            log_gpu_memory(
                 writer,
                 global_step,
-                message_prefix=f"epoch {epoch + 1} start memory",
+                device,
+                message_prefix=f"epoch {epoch + 1} start gpu memory",
             )
 
-            time_start = time.time()
+            time_iter_start = time.time()
             for batch, (X, y) in enumerate(data_loader, start=1):
                 LOGGER.info(
-                    "epoch=%s/%s batch=%s/%s", epoch + 1, epochs, batch, num_batches
+                    "epoch=%s/%s batch=%s/%s",
+                    epoch + 1,
+                    epochs,
+                    batch,
+                    batches_per_epoch,
                 )
+                data_wait_seconds = time.time() - time_iter_start
                 y = y.to(device)
 
                 if model_engine:
@@ -330,8 +456,11 @@ def main(
                     optimizer.zero_grad(set_to_none=True)
 
                 LOGGER.debug("performing forward pass...")
+                time_forward_start = time.time()
                 pred = model_engine(X) if model_engine else model(X)
-                LOGGER.debug("finished model forward: %ss", time.time() - time_start)
+                maybe_synchronize(device)
+                forward_seconds = time.time() - time_forward_start
+                LOGGER.debug("finished model forward: %ss", forward_seconds)
 
                 # mean absolute error of one variable
                 LOGGER.debug("calculating loss...")
@@ -345,44 +474,83 @@ def main(
                     epoch + 1,
                     epochs,
                     batch,
-                    num_batches,
+                    batches_per_epoch,
                     global_step,
                     loss_value,
                 )
-                LOGGER.debug("finished loss calc: %ss", time.time() - time_start)
 
                 LOGGER.debug("performing backward pass...")
+                time_backward_start = time.time()
                 if model_engine:
                     model_engine.backward(loss)
                     model_engine.step()
                 else:
                     loss.backward()
                     optimizer.step()
-                LOGGER.debug("finished loss backward: %ss", time.time() - time_start)
+                maybe_synchronize(device)
+                backward_step_seconds = time.time() - time_backward_start
+                LOGGER.debug("finished loss backward: %ss", backward_step_seconds)
 
-                time_end = time.time()
-                LOGGER.info("Time for 1 iteration: %ss", time_end - time_start)
-                times.append(time_end - time_start)
-                time_start = time.time()
+                time_iter_end = time.time()
+                step_seconds = time_iter_end - time_iter_start
+                LOGGER.info("Time for 1 iteration: %ss", step_seconds)
+                times.append(step_seconds)
                 global_step += 1
-                log_memory(
+                log_step_perf(
                     writer,
                     global_step,
-                    message_prefix=f"after epoch {epoch + 1} batch {batch} memory",
+                    data_wait_seconds=data_wait_seconds,
+                    forward_seconds=forward_seconds,
+                    backward_step_seconds=backward_step_seconds,
+                    step_seconds=step_seconds,
                 )
+                peak_host_rss_mib = max(
+                    peak_host_rss_mib,
+                    log_memory(
+                        writer,
+                        global_step,
+                        message_prefix=f"after epoch {epoch + 1} batch {batch} memory",
+                    )["total"],
+                )
+                log_gpu_memory(
+                    writer,
+                    global_step,
+                    device,
+                    message_prefix=f"after epoch {epoch + 1} batch {batch} gpu memory",
+                )
+                time_iter_start = time.time()
+                if max_steps is not None and batch >= max_steps:
+                    LOGGER.info(
+                        "Reached --max_steps=%s; stopping epoch %s early.",
+                        max_steps,
+                        epoch + 1,
+                    )
+                    break
 
             if epoch_losses:
                 epoch_loss = sum(epoch_losses) / len(epoch_losses)
                 writer.add_scalar("train/epoch_loss", epoch_loss, epoch)
                 LOGGER.info("Average loss for epoch %s: %s", epoch + 1, epoch_loss)
             writer.add_scalar("train/epoch_seconds", time.time() - epoch_start, epoch)
-            log_memory(
+            peak_host_rss_mib = max(
+                peak_host_rss_mib,
+                log_memory(
+                    writer,
+                    global_step,
+                    prefix="memory_epoch",
+                    message_prefix=f"epoch {epoch + 1} end memory",
+                )["total"],
+            )
+            log_gpu_memory(
                 writer,
                 global_step,
-                prefix="memory_epoch",
-                message_prefix=f"epoch {epoch + 1} end memory",
+                device,
+                prefix="gpu_memory_epoch",
+                message_prefix=f"epoch {epoch + 1} end gpu memory",
             )
-            if model_engine:
+            if skip_checkpoint:
+                LOGGER.info("Skipped checkpoint save (--skip_checkpoint)")
+            elif model_engine:
                 model_engine.save_checkpoint(
                     checkpoint_dir,
                     client_state={"epoch": epoch + 1, "global_step": global_step},
@@ -406,7 +574,31 @@ def main(
     LOGGER.info("Total time for %s epochs: %ss", epochs, total_time)
 
     time_end_total = time.time()
-    LOGGER.info("Total time: %ss", time_end_total - time_start_total)
+    total_seconds = time_end_total - time_start_total
+    LOGGER.info("Total time: %ss", total_seconds)
+
+    peak_gpu_allocated_mib = None
+    peak_gpu_reserved_mib = None
+    if device.type == "cuda":
+        peak_gpu_allocated_mib = torch.cuda.max_memory_allocated(device) / BYTES_PER_MIB
+        peak_gpu_reserved_mib = torch.cuda.max_memory_reserved(device) / BYTES_PER_MIB
+
+    summary = summarize_run(
+        device=str(device),
+        epochs=epochs,
+        max_steps=max_steps,
+        total_steps=total_steps,
+        model_load_seconds=model_load_seconds,
+        data_load_seconds=data_load_seconds,
+        iteration_seconds=times,
+        total_seconds=total_seconds,
+        peak_host_rss_mib=peak_host_rss_mib,
+        peak_gpu_allocated_mib=peak_gpu_allocated_mib,
+        peak_gpu_reserved_mib=peak_gpu_reserved_mib,
+    )
+    summary_path = Path(log_dir) / "benchmark_summary.json"
+    summary_path.write_text(json.dumps(summary, indent=2))
+    LOGGER.info("Wrote benchmark summary: %s", summary_path)
 
     LOGGER.info("done")
 
@@ -479,6 +671,17 @@ if __name__ == "__main__":
         default=Path("ds_config.json"),
         type=Path,
     )
+    parser.add_argument(
+        "--max_steps",
+        help="Cap the number of batches processed per epoch (for quick benchmark runs)",
+        default=None,
+        type=int,
+    )
+    parser.add_argument(
+        "--skip_checkpoint",
+        help="Skip saving epoch checkpoints (for throwaway benchmark runs)",
+        action="store_true",
+    )
     # Required by the DeepSpeed launcher; ignored in single-process mode.
     parser.add_argument("--local_rank", type=int, default=-1, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -496,4 +699,6 @@ if __name__ == "__main__":
         use_lora=args.lora,
         use_gpu=args.gpu,
         use_chunk_and_check=(not args.no_chunk),
+        max_steps=args.max_steps,
+        skip_checkpoint=args.skip_checkpoint,
     )
