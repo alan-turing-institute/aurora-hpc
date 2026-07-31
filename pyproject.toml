@@ -15,6 +15,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pre-commit",
+    "hypothesis",
 ]
 bask = [
     "xarray==2023.06.0",

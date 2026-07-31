@@ -3,6 +3,9 @@
 import argparse
 import json
 import logging
+import os
+import socket
+import subprocess
 import time
 import warnings
 from datetime import datetime as dt
@@ -142,6 +145,11 @@ def log_memory(
     return memory
 
 
+def configure_tf32(enabled: bool) -> None:
+    torch.backends.cuda.matmul.allow_tf32 = enabled
+    torch.backends.cudnn.allow_tf32 = enabled
+
+
 def maybe_synchronize(device: torch.device) -> None:
     if device.type == "cuda":
         torch.cuda.synchronize(device)
@@ -203,6 +211,59 @@ def log_step_perf(
     writer.add_scalar(f"{prefix}/steps_per_second", 1.0 / step_seconds, step)
 
 
+def git_commit_info(repo_dir: Path) -> dict[str, str | bool | None]:
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return {"commit": None, "dirty": None}
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_dir,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout
+        dirty = bool(status.strip())
+    except (OSError, subprocess.CalledProcessError):
+        dirty = None
+    return {"commit": commit, "dirty": dirty}
+
+
+def slurm_job_info() -> dict[str, str | None]:
+    return {
+        "job_id": os.environ.get("SLURM_JOB_ID"),
+        "partition": os.environ.get("SLURM_JOB_PARTITION"),
+        "account": os.environ.get("SLURM_JOB_ACCOUNT"),
+        "qos": os.environ.get("SLURM_JOB_QOS"),
+        "nodelist": os.environ.get("SLURM_JOB_NODELIST"),
+        "cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
+        "mem_per_node": os.environ.get("SLURM_MEM_PER_NODE"),
+        "gpus": os.environ.get("SLURM_JOB_GPUS")
+        or os.environ.get("SLURM_GPUS_ON_NODE"),
+    }
+
+
+def gpu_device_name(device: torch.device) -> str | None:
+    return torch.cuda.get_device_name(device) if device.type == "cuda" else None
+
+
+def run_metadata(cli_args: dict, device: torch.device) -> dict:
+    return {
+        "hostname": socket.gethostname(),
+        "gpu_name": gpu_device_name(device),
+        "git": git_commit_info(Path(__file__).resolve().parent),
+        "slurm": slurm_job_info(),
+        "cli_args": cli_args,
+    }
+
+
 def summarize_run(
     *,
     device: str,
@@ -217,6 +278,7 @@ def summarize_run(
     peak_gpu_allocated_mib: float | None,
     peak_gpu_reserved_mib: float | None,
     warmup_iterations: int = 1,
+    metadata: dict | None = None,
 ) -> dict:
     timed_iterations = iteration_seconds[warmup_iterations:]
     if timed_iterations:
@@ -239,6 +301,7 @@ def summarize_run(
         "peak_gpu_allocated_mib": peak_gpu_allocated_mib,
         "peak_gpu_reserved_mib": peak_gpu_reserved_mib,
         "generated_at": dt.now().isoformat(timespec="seconds"),
+        "metadata": metadata or {},
     }
 
 
@@ -249,6 +312,7 @@ def main(
     small: bool,
     checkpoint_dir: str | Path,
     resume: bool,
+    build_dir: str = "build",
     use_deepspeed: bool = False,
     ds_config: str | Path | None = None,
     use_adam8bit: bool = False,
@@ -257,10 +321,19 @@ def main(
     use_chunk_and_check: bool = False,
     max_steps: int | None = None,
     skip_checkpoint: bool = False,
+    use_tf32: bool = True,
+    use_autocast: bool = True,
+    hf_offline: bool = False,
+    seed: int | None = None,
+    cli_args: dict | None = None,
 ):
 
     time_start_total = time.time()
     LOGGER.info("Script start time: %s", dt.now())
+
+    if seed is not None:
+        torch.manual_seed(seed)
+        LOGGER.info("Seeded torch RNG with seed=%s", seed)
 
     assert Path(
         checkpoint_dir
@@ -271,18 +344,35 @@ def main(
             "--gpu is only for non-DeepSpeed training; launch with DeepSpeed instead."
         )
 
+    configure_tf32(use_tf32)
+    LOGGER.info("TensorFloat-32 (TF32): %s", "enabled" if use_tf32 else "disabled")
+
+    if hf_offline:
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        LOGGER.info(
+            "HF_HUB_OFFLINE=1: loading the checkpoint from the local Hugging Face "
+            "Hub cache without a network check (fails if it isn't cached yet)."
+        )
+
     time_start_loading_model = time.time()
     LOGGER.info("Start time loading model: %s", dt.now())
     if small:
         LOGGER.info("loading small model...")
         model = AuroraSmallPretrained(
-            use_lora=use_lora, use_chunked_checkpointing=use_chunk_and_check
+            use_lora=use_lora,
+            use_chunked_checkpointing=use_chunk_and_check,
+            autocast=use_autocast,
         )
     else:
         LOGGER.info("loading normal model...")
         model = AuroraPretrained(
-            use_lora=use_lora, use_chunked_checkpointing=use_chunk_and_check
+            use_lora=use_lora,
+            use_chunked_checkpointing=use_chunk_and_check,
+            autocast=use_autocast,
         )
+    LOGGER.info(
+        "BF16 autocast (backbone): %s", "enabled" if use_autocast else "disabled"
+    )
     model.load_checkpoint(strict=not use_lora)
     time_end_loading_model = time.time()
     model_load_seconds = time_end_loading_model - time_start_loading_model
@@ -380,16 +470,22 @@ def main(
     time_start_loading_data = time.time()
     LOGGER.info("Start time loading data: %s", dt.now())
     LOGGER.info("loading data...")
-    dataset = AuroraDataset(data_path=download_path, t=1, use_dask=True)
+    dataset = AuroraDataset(
+        data_path=download_path, t=1, use_dask=True, build_dir=build_dir
+    )
     time_end_loading_data = time.time()
     data_load_seconds = time_end_loading_data - time_start_loading_data
     LOGGER.info("End time loading data: %s", dt.now())
     LOGGER.info("Time loading data: %ss", data_load_seconds)
 
+    shuffle_generator = (
+        torch.Generator().manual_seed(seed) if seed is not None else None
+    )
     data_loader = DataLoader(
         dataset=dataset,
         batch_size=1,  # If we set a batch size we'll need a collate_fn
         shuffle=True,
+        generator=shuffle_generator,
         collate_fn=aurora_collate_fn,
         num_workers=0,
         worker_init_fn=partial(
@@ -595,6 +691,7 @@ def main(
         peak_host_rss_mib=peak_host_rss_mib,
         peak_gpu_allocated_mib=peak_gpu_allocated_mib,
         peak_gpu_reserved_mib=peak_gpu_reserved_mib,
+        metadata=run_metadata(cli_args or {}, device),
     )
     summary_path = Path(log_dir) / "benchmark_summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
@@ -603,10 +700,20 @@ def main(
     LOGGER.info("done")
 
 
-if __name__ == "__main__":
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--data_path", "-d", help="path to download directory", required=True, type=Path
+    )
+    parser.add_argument(
+        "--build_dir",
+        default="build",
+        help=(
+            "path (relative to --data_path) to the regrid pipeline's run output "
+            "— e.g. 'build/MPI-ESM1-2-LR_ssp585_r1i1p1f1_...'. regrid namespaces "
+            "each run under build/<run_id>/, so this must be set explicitly to "
+            "pick a specific source/experiment/member/window."
+        ),
     )
     parser.add_argument(
         "--epochs", "-e", help="number of training epochs", default=1, type=int
@@ -662,8 +769,30 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--no-chunk",
-        help="Use chunk & checkpoint to reduce peak memory consumption.",
-        action="store_false",
+        help="Don't use chunk & checkpoint to reduce peak memory consumption.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--no-tf32",
+        help="Disable TensorFloat-32 for matmul/cuDNN ops. Enabled by default "
+        "(no effect on pre-Ampere GPUs or CPU); benchmarked ~3.3x faster with "
+        "no accuracy validation done yet beyond sane, non-NaN losses.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--no-autocast",
+        help="Disable BF16 torch.autocast on the model backbone (Aurora's own "
+        "`autocast` option). Enabled by default; benchmarked ~3.2x faster and "
+        "lower peak memory, and Aurora's docs call it important for "
+        "fine-tuning, but we haven't validated convergence/quality yet.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--hf_offline",
+        help="Load the checkpoint from the local Hugging Face Hub cache without "
+        "the network freshness check (sets HF_HUB_OFFLINE=1). Only works once "
+        "the checkpoint has been downloaded at least once.",
+        action="store_true",
     )
     parser.add_argument(
         "--ds_config",
@@ -682,10 +811,26 @@ if __name__ == "__main__":
         help="Skip saving epoch checkpoints (for throwaway benchmark runs)",
         action="store_true",
     )
+    parser.add_argument(
+        "--seed",
+        help="Seed torch's RNG and the DataLoader shuffle order, for reproducible "
+        "comparisons across runs (e.g. matching data order between a baseline "
+        "and a variant run). Unseeded (nondeterministic shuffle) by default.",
+        default=None,
+        type=int,
+    )
     # Required by the DeepSpeed launcher; ignored in single-process mode.
     parser.add_argument("--local_rank", type=int, default=-1, help=argparse.SUPPRESS)
-    args = parser.parse_args()
+    return parser
+
+
+def cli_main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
     configure_logging(args.log_level)
+    cli_args = {
+        key: (str(value) if isinstance(value, Path) else value)
+        for key, value in vars(args).items()
+    }
     main(
         args.data_path,
         args.epochs,
@@ -693,12 +838,22 @@ if __name__ == "__main__":
         args.use_small,
         args.checkpoint_dir,
         args.resume,
+        build_dir=args.build_dir,
         use_deepspeed=args.deepspeed,
         ds_config=args.ds_config,
         use_adam8bit=args.adam8bit,
         use_lora=args.lora,
         use_gpu=args.gpu,
         use_chunk_and_check=(not args.no_chunk),
+        use_tf32=(not args.no_tf32),
+        use_autocast=(not args.no_autocast),
+        hf_offline=args.hf_offline,
         max_steps=args.max_steps,
         skip_checkpoint=args.skip_checkpoint,
+        seed=args.seed,
+        cli_args=cli_args,
     )
+
+
+if __name__ == "__main__":
+    cli_main()

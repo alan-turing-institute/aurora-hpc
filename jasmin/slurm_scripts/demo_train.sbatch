@@ -29,8 +29,11 @@ stdbuf -o0 nvidia-smi dmon -o TD -s puct -d 1 \
 DMON_PID=$!
 trap 'kill "$DMON_PID" 2>/dev/null' EXIT
 
-# NPROC_PER_NODE defaults to 1 and that is currently the
-# only useful value but is future-proof for DDP training.
+# NOTE: --nproc_per_node above 1 does NOT do real multi-GPU training today -
+# train.py has no init_process_group/DistributedDataParallel/DistributedSampler,
+# so extra ranks would redundantly retrain the full dataset rather than split
+# it. TODO: implement real DDP before using this for multi-GPU wall-clock
+# scaling. NPROC_PER_NODE defaults to 1, the only currently-correct value.
 ./gpu-env/bin/python -m torch.distributed.run \
   --standalone \
   --nproc_per_node="${NPROC_PER_NODE:-1}" \

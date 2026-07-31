@@ -105,6 +105,13 @@ class AuroraDataset(Dataset):
         t (int): the number of additional timesteps to load alongside each datapoint.
         static_data (Path): Static NetCDF filename relative to `data_path`.
         use_dask (bool): Whether to use dask to load the datasets.
+        build_dir (str): Path (relative to `data_path`) to the regrid pipeline's
+            run output, containing `surface.regridded/` and `atmos.regridded/`.
+            regrid namespaces each run's output under `build/<run_id>/` (see
+            `regrid`'s `workflow/lib/cmip6.py::run_id`) so that different
+            source/experiment/member/window combinations never share a
+            directory — pass e.g. `"build/MPI-ESM1-2-LR_ssp585_r1i1p1f1_..."`
+            to select a specific run explicitly.
     """
 
     def __init__(
@@ -113,6 +120,7 @@ class AuroraDataset(Dataset):
         t: int,
         static_data: str | Path = Path("0pt25_static.nc"),
         use_dask: bool = False,
+        build_dir: str = "build",
     ):
         self.t = t
 
@@ -121,8 +129,8 @@ class AuroraDataset(Dataset):
         if isinstance(static_data, str):
             static_data = Path(static_data)
 
-        surface_path = data_path / "build/surface.regridded"
-        atmos_path = data_path / "build/atmos.regridded"
+        surface_path = data_path / build_dir / "surface.regridded"
+        atmos_path = data_path / build_dir / "atmos.regridded"
         static_path = data_path / static_data
 
         if not surface_path.is_dir():

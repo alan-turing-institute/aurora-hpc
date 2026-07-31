@@ -34,17 +34,28 @@ class LazyCMIP6Data:
         data_path: Directory containing ``build/`` and the static NetCDF file,
             i.e. the same directory passed to ``train.py --data_path``.
         static_data: Static NetCDF filename relative to ``data_path``.
+        build_dir: Path (relative to ``data_path``) to the regrid pipeline's
+            run output — see ``dataset.AuroraDataset``'s docstring for why
+            this must be selected explicitly rather than defaulting to a
+            single shared ``build/`` directory.
     """
 
     def __init__(
-        self, data_path: str | Path, static_data: str | Path = "0pt25_static.nc"
+        self,
+        data_path: str | Path,
+        static_data: str | Path = "0pt25_static.nc",
+        build_dir: str = "build",
     ):
         data_path = Path(data_path)
         self.surf_ds = open_build_variables(
-            data_path / "build/surface.regridded", BUILD_SURFACE_VAR_MAP, use_dask=True
+            data_path / build_dir / "surface.regridded",
+            BUILD_SURFACE_VAR_MAP,
+            use_dask=True,
         )
         self.atmos_ds = open_build_variables(
-            data_path / "build/atmos.regridded", BUILD_ATMOS_VAR_MAP, use_dask=True
+            data_path / build_dir / "atmos.regridded",
+            BUILD_ATMOS_VAR_MAP,
+            use_dask=True,
         )
         static_ds = xr.open_dataset(data_path / Path(static_data), engine="netcdf4")
         self.static_vars = {

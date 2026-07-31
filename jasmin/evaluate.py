@@ -100,6 +100,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data_path", default=Path("data"), type=Path)
     parser.add_argument(
+        "--build_dir",
+        default="build",
+        help=(
+            "path (relative to --data_path) to the regrid pipeline's run output "
+            "— e.g. 'build/MPI-ESM1-2-LR_ssp585_r1i1p1f1_...'. regrid namespaces "
+            "each run under build/<run_id>/, so this must be set explicitly to "
+            "pick a specific source/experiment/member/window."
+        ),
+    )
+    parser.add_argument(
         "--checkpoint",
         type=Path,
         default=None,
@@ -152,7 +162,7 @@ def main() -> None:
     device = torch.device(args.device)
     args.out.mkdir(parents=True, exist_ok=True)
 
-    data = LazyCMIP6Data(args.data_path)
+    data = LazyCMIP6Data(args.data_path, build_dir=args.build_dir)
     last_needed = max(inits) + args.history_t + args.steps
     if last_needed > len(data) - 1:
         raise ValueError(
