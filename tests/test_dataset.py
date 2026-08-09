@@ -6,9 +6,9 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 import xarray as xr
+from aurora.batch import Batch
 from torch.utils.data import DataLoader
 
-from aurora import Batch
 from aurora_hpc.dataset import AuroraDataset, aurora_collate_fn
 
 
