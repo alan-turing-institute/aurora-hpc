@@ -1,0 +1,14 @@
+[flake8]
+extend_exclude =
+    .git,
+    __pycache__,
+    .venv,
+    venv,
+    .mypy_cache,
+    .pytest_cache,
+    baskerville/*,
+    dawn/*,
+    train/*,
+    macos/scripts/try_sacred.py,
+    macos/scripts/wandb_mt.py
+max_line_length = 120
